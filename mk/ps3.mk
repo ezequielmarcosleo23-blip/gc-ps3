@@ -34,15 +34,18 @@ PPU_COMMON      := $(PS3_SHARED_OBJS) $(LIB_OBJS) $(SPU_BLOBS)
 # --- librerías con su propio Makefile (lib/spukit, lib/rsxkit) ----------------
 # Se compilan con su Makefile original en $(BUILD)/lib/<nombre>. rsxkit necesita
 # cgcomp, que carga libCg.so (paquete libcg de Ubuntu multiverse).
+# Sus Makefiles calculan HERE con abspath y make no soporta espacios en rutas
+# ("C:\GCNS3 EMU"): se les pasa HERE=. y un OUT relativo a lib/<nombre>.
 KIT_ENV  := PATH="$(PS3DEV)/bin:$(PS3DEV)/ppu/bin:$(PS3DEV)/spu/bin:$$PATH"
+KIT_OUT   = $(if $(filter /%,$(BUILD)),$(BUILD),../../$(BUILD))/lib/$(1)
 SPUKIT_A := $(BUILD)/lib/spukit/libspukit.a
 RSXKIT_A := $(BUILD)/lib/rsxkit/librsxkit.a
 
 $(SPUKIT_A): $(wildcard lib/spukit/Makefile lib/spukit/src/*.c lib/spukit/include/spukit/*.h)
-	$(KIT_ENV) $(MAKE) --no-print-directory -C lib/spukit OUT=$(abspath $(BUILD))/lib/spukit
+	$(KIT_ENV) $(MAKE) --no-print-directory -C lib/spukit HERE=. OUT=$(call KIT_OUT,spukit)
 
 $(RSXKIT_A): $(wildcard lib/rsxkit/Makefile lib/rsxkit/src/*.[ch] lib/rsxkit/include/rsxkit/*.h lib/rsxkit/shaders/*.[vf]cg)
-	$(KIT_ENV) $(MAKE) --no-print-directory -C lib/rsxkit OUT=$(abspath $(BUILD))/lib/rsxkit
+	$(KIT_ENV) $(MAKE) --no-print-directory -C lib/rsxkit HERE=. OUT=$(call KIT_OUT,rsxkit)
 
 # --- app principal ------------------------------------------------------------
 PS3_ELF      := $(BUILD)/ps3/$(APP).elf
