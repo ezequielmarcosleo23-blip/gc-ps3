@@ -45,6 +45,7 @@
 #include <sys/file.h>
 
 #include "common/harness.h"
+#include "platform/ps3/paths.h"
 
 #define NOBITS_MB    32u                       /* ±32 MB: alcance de un salto relativo */
 #define NOBITS_BYTES (NOBITS_MB * 1024u * 1024u)
@@ -53,7 +54,7 @@
 #define FLUSH_REPS   100
 #define CACHE_LINE   128u
 
-#define DATA_DIR  "/dev_hdd0/tmp/gcps3"
+#define DATA_DIR  GCPS3_DATA_DIR
 #define JIT_STATE DATA_DIR "/jit_estado.txt"
 #define JIT_CRASH DATA_DIR "/jit_crash.txt"
 

@@ -38,6 +38,7 @@
 
 #include "common/harness.h"
 #include "core/pattern.h"
+#include "platform/ps3/paths.h"
 
 #define SEQ_READ      (1u << 20)
 #define RAND_READ     (32u << 10)
@@ -51,8 +52,8 @@ typedef struct target {
 } target_t;
 
 static const target_t targets[] = {
-    { "/dev_hdd0/tmp/gcps3/patron.bin",  1 },
-    { "/dev_usb000/gcps3/patron.bin",    0 },
+    { GCPS3_DATA_DIR "/patron.bin", 1 },
+    { GCPS3_USB_DIR "/patron.bin",  0 },
 };
 
 static uint8_t *buf;

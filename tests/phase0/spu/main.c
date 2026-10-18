@@ -28,8 +28,8 @@
  * Con valores exactos (enteros y fracciones de potencia de 2) el resultado no
  * depende del redondeo y el SPU debe dar los mismos bits que el PPU: eso decide
  * OK/FAIL. Después, con valores cualquiera, se informa cuántos componentes
- * difieren y por cuántas ULP (la SPU redondea hacia cero; el PPU, al más
- * cercano): es el dato que respalda la decisión D-007 (FPU de Gekko en el PPE).
+ * difieren y el error máximo relativo a la escala de la cuenta (la SPU
+ * redondea hacia cero; el PPU, al más cercano): es el dato que respalda la decisión D-007 (FPU de Gekko en el PPE).
  */
 #include <malloc.h>
 #include <math.h>
@@ -122,20 +122,29 @@ static uint32_t bits(float f)
     return u;
 }
 
-/* Componentes distintos de la referencia y la mayor diferencia en ULP. */
-static uint32_t compare(uint32_t *max_ulp)
+/*
+ * Componentes distintos de la referencia y el mayor error, medido contra la
+ * escala de cada cuenta: |spu - ppu| / (|m0 x| + |m1 y| + |m2 z| + |m3 w|), en
+ * unidades de 2^-24 (el redondeo de un float). Las ULP del resultado no sirven
+ * aquí: cerca de cero, por cancelación, una diferencia de redondeo en los
+ * términos se ve como miles de ULP del resultado.
+ */
+static uint32_t compare(const float *m, double *max_units)
 {
     uint32_t bad = 0;
-    *max_ulp = 0;
+    *max_units = 0.0;
     for (uint32_t i = 0; i < NVERT; i++)
         for (int k = 0; k < 4; k++) {
-            uint32_t a = bits(dst[i][k]), b = bits(ref[i][k]);
-            if (a == b)
+            if (bits(dst[i][k]) == bits(ref[i][k]))
                 continue;
             bad++;
-            uint32_t ulp = ((a ^ b) & 0x80000000u) ? 0xFFFFFFFFu : (a > b ? a - b : b - a);
-            if (ulp > *max_ulp)
-                *max_ulp = ulp;
+            double scale = 0.0;
+            for (int j = 0; j < 4; j++)
+                scale += fabs((double)m[k * 4 + j] * (double)src[i][j]);
+            double diff = fabs((double)dst[i][k] - (double)ref[i][k]);
+            double units = scale > 0.0 ? diff / (scale * 0x1p-24) : 1e30;
+            if (!(units <= *max_units))          /* NaN también cuenta */
+                *max_units = units;
         }
     return bad;
 }
@@ -261,11 +270,13 @@ static int run_pass(const char *label, const float *m, int exact)
     for (size_t k = 0; k < sizeof modes / sizeof modes[0]; k++) {
         const xmode_t *md = &modes[k];
         uint64_t best_us = ~0ull;
-        uint32_t best_ticks = 0, worst_bad = 0, max_ulp = 0;
+        uint32_t best_ticks = 0, worst_bad = 0;
+        double max_units = 0.0;
 
         for (int run = 0; run < RUNS; run++) {
             uint64_t us = 0;
-            uint32_t ticks = 0, ulp = 0;
+            uint32_t ticks = 0;
+            double units = 0.0;
             memset(dst, 0xFF, NVERT * sizeof(vert_t));      /* NaN: nada viejo pasa la comparación */
             __asm__ volatile ("sync" ::: "memory");
             int r = md->workers ? run_kit(md->workers, m, &us, &ticks) : run_raw(m, &us, &ticks);
@@ -274,11 +285,11 @@ static int run_pass(const char *label, const float *m, int exact)
                 rc = -1;
                 break;
             }
-            uint32_t bad = compare(&ulp);
+            uint32_t bad = compare(m, &units);
             if (bad > worst_bad)
                 worst_bad = bad;
-            if (ulp > max_ulp)
-                max_ulp = ulp;
+            if (!(units <= max_units))
+                max_units = units;
             if (us < best_us) {
                 best_us = us;
                 best_ticks = ticks;
@@ -290,13 +301,13 @@ static int run_pass(const char *label, const float *m, int exact)
              label, md->name, RUNS, (unsigned long long)best_us, tb_to_us(best_ticks),
              best_us ? NVERT / (double)best_us : 0.0);
         if (exact && worst_bad) {
-            LOGE("%s %s: %u componentes distintos del PPU (max %u ULP)", label, md->name, worst_bad, max_ulp);
+            LOGE("%s %s: %u componentes distintos del PPU (error max %.1f u)", label, md->name, worst_bad, max_units);
             rc = -1;
         } else if (exact) {
             LOGI("%s %s: bit a bit igual al PPU", label, md->name);
         } else {
-            LOGI("%s %s: %u de %u componentes difieren del PPU, max %u ULP",
-                 label, md->name, worst_bad, NVERT * 4, max_ulp);
+            LOGI("%s %s: %u de %u componentes difieren del PPU; error max %.2f u (u = 2^-24 de la escala)",
+                 label, md->name, worst_bad, NVERT * 4, max_units);
         }
     }
     return rc;

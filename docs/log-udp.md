@@ -23,7 +23,7 @@ La implementación de referencia es `src/core/logline.c` (con pruebas en `tests/
 
 | Situación | La app envía a |
 | --- | --- |
-| Existe `/dev_hdd0/tmp/gcps3/log.cfg` con `IP` o `IP:puerto` | Solo esa dirección |
+| Existe `/dev_hdd0/gcps3/log.cfg` con `IP` o `IP:puerto` | Solo esa dirección |
 | No existe | `255.255.255.255` (red local) y `127.0.0.1` (sirve en RPCS3) |
 
 Como la misma línea puede llegar por dos caminos, el receptor descarta duplicados por número de secuencia.
@@ -40,7 +40,7 @@ El logger es seguro entre hilos del PPU: un `lwmutex` cubre numerar, enviar y co
 
 Cada ejecución queda en `logs/AAAAMMDD-HHMMSS_<prueba>_<sesión>.log` (ignorado por git). Al llegar el `RESULT` el receptor muestra el resumen: líneas recibidas, perdidas y duplicadas.
 
-Las líneas `D` van al archivo sin mostrarse; en pantalla solo aparece cuántas llegaron. Los dos receptores piden un búfer de recepción de 8 MB para absorber ráfagas sin pausa: en una prueba en Linux (PowerShell 7 y Python), 10 000 líneas enviadas en 36 ms llegaron todas; en Windows lo dirá la prueba `udplog`.
+Las líneas `D` van al archivo sin mostrarse; en pantalla solo aparece cuántas llegaron. Los dos receptores piden un búfer de recepción de 8 MB para absorber ráfagas sin pausa: en una prueba en Linux (PowerShell 7 y Python), 10 000 líneas enviadas en 36 ms llegaron todas; en Windows, con `logrecv.cmd` y RPCS3, la prueba `udplog` perdió 0 de 40 017 líneas, 10 000 de ellas a 14 885 líneas/s.
 
 ## RPCS3
 

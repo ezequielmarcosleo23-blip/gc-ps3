@@ -20,7 +20,7 @@
 /*
  * Log por UDP hacia la PC (y copia en la TTY).
  *
- * Destinos: si existe /dev_hdd0/tmp/gcps3/log.cfg con una IP ("192.168.1.10"
+ * Destinos: si existe /dev_hdd0/gcps3/log.cfg con una IP ("192.168.1.10"
  * o "192.168.1.10:18194"), solo esa; si no, broadcast 255.255.255.255 y
  * 127.0.0.1 (este último sirve en RPCS3). El receptor descarta duplicados por
  * número de secuencia.
@@ -37,7 +37,9 @@
 
 #include <stdint.h>
 
-#define UDPLOG_CFG_PATH "/dev_hdd0/tmp/gcps3/log.cfg"
+#include "platform/ps3/paths.h"
+
+#define UDPLOG_CFG_PATH GCPS3_DATA_DIR "/log.cfg"
 
 /* Inicia la red y el socket. Sin red, el log sigue saliendo por la TTY. */
 int  udplog_init(const char *test_name);

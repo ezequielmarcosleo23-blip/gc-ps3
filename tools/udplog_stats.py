@@ -86,7 +86,8 @@ def report(bursts, console, totals, out=sys.stdout):
         span = (b["t1"] - b["t0"]) if got > 1 else 0
         rate = f"{(got - 1) * 1e6 / span:,.0f}/s" if span else "-"
         c = console.get(group)
-        cost = f"{c['us'] / max(1, expected):.2f} us" if c else "-"
+        # Con ritmo fijo el tiempo por línea es la espera, no el costo
+        cost = f"{c['us'] / max(1, expected):.2f} us" if c and group not in ("r2", "r3") else "-"
         errors = str(c["errors"]) if c else "-"
         label = RATES.get(group, f"{len(b['parts'])} hilos" if group == "hilos" else "")
         rows.append((group, label, str(expected), str(got), f"{lost} ({lost * 100 / expected:.2f} %)",

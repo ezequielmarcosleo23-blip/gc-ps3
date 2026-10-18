@@ -12,9 +12,9 @@ bytes); no contiene nada de Nintendo.
     python3 tools/mkiso.py --verify patron.bin        # comprueba un archivo
     python3 tools/mkiso.py --selftest                 # prueba interna (la corre `make test`)
 
-Dónde ponerlo: en la consola /dev_hdd0/tmp/gcps3/patron.bin (y opcional
-/dev_usb000/gcps3/patron.bin); en RPCS3, la carpeta dev_hdd0/tmp/gcps3/ dentro de
-la de RPCS3.
+Dónde ponerlo: en la consola /dev_hdd0/gcps3/patron.bin (y opcional
+/dev_usb000/gcps3/patron.bin); en RPCS3, la carpeta dev_hdd0/gcps3/ dentro de
+la de RPCS3. No en dev_hdd0/tmp: RPCS3 la vacía al arrancar cada programa.
 """
 import argparse
 import array

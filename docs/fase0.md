@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | A. Repo y build | Esqueleto GPLv2+, Makefile PPU/SPU/PC, ps3mapi-lib fijada, imagen Docker, GitHub Actions | Completa (2026-10-18): CI verde, prueba de humo OK en RPCS3 |
 | B. Base de pruebas | Detección de entorno, log por UDP con `RESULT: OK/FAIL`, receptores en la PC, `make run-test` | Validada en RPCS3 (2026-10-18); falta la parte de consola: ps3load, buzzer, HEN |
-| C. Las 5 pruebas | `udplog`, `jit`, `spu`, `rsx`, `iso` | Escritas y compiladas (2026-10-18); falta correrlas en RPCS3 (`jit`, en consola) |
+| C. Las 5 pruebas | `udplog`, `jit`, `spu`, `rsx`, `iso` | En RPCS3 (2026-10-18): `udplog`, `spu` y `rsx` OK; `iso` se repite con el archivo fuera de `tmp`; `jit` espera a la consola |
 | D. Cierre | Resultados, `perf-log.md`, decisiones y plan de la Fase 1 | Pendiente |
 
 ## Pruebas en consola
@@ -40,7 +40,7 @@ Siempre con `tools\logrecv.cmd` abierto y File → Boot (S)ELF → `build\phase0
 | --- | --- | --- | --- |
 | `udplog` | — | ~2 min | `python3 tools/udplog_stats.py` en Ubuntu (lee el log más reciente) |
 | `spu` | — | segundos | — |
-| `iso` | Generar el archivo en `dev_hdd0/tmp/gcps3/patron.bin` de RPCS3: `python3 tools/mkiso.py <ruta>` | según el disco | — |
+| `iso` | Generar el archivo en `dev_hdd0/gcps3/patron.bin` de RPCS3 (no en `tmp`, que RPCS3 vacía): `python3 tools/mkiso.py <ruta>` | según el disco | — |
 | `rsx` | Configuration → GPU → **Write Color Buffers** activado (si no, la lectura de píxeles da FAIL) | 10 s | Captura de pantalla |
 | `jit` | Solo en consola | — | — |
 
@@ -50,5 +50,9 @@ Siempre con `tools\logrecv.cmd` abierto y File → Boot (S)ELF → `build\phase0
 | --- | --- | --- | --- |
 | 2026-10-18 | Prueba de humo de la app (`gc-ps3.self`) | RPCS3 v0.0.42 | `spu: hello OK (1.5 6.0 0.0 44.0)`, `RESULT: OK` |
 | 2026-10-18 | `hello`: log UDP hasta la PC (`logrecv.cmd`) | RPCS3 v0.0.42 | 13 líneas, 0 perdidas, 0 envíos fallidos; `RESULT: OK` |
+| 2026-10-18 | `udplog` | RPCS3 v0.0.42 + `logrecv.cmd` | 40 017 líneas, 0 perdidas en las 4 ráfagas (sin pausa, 1000/s, 100/s, 4 hilos) y 0 envíos fallidos; sin pausa 67 µs/línea (14 885 líneas/s); con 4 hilos, secuencia en orden; `RESULT: OK` |
+| 2026-10-18 | `spu` | RPCS3 v0.0.42 | Con valores exactos, hilo directo, spukit x1 y x4 dan los mismos bits que el PPU. Con valores cualquiera difieren 161 848 de 256 000 componentes: lo esperado si la SPU redondea hacia cero (una simulación en la PC da 161 491); `RESULT: OK` |
+| 2026-10-18 | `rsx` | RPCS3 v0.0.42 (Write Color Buffers) | Salida 1280×720; destino 640×480 presentado en x=160, 960×720 (4:3); píxeles leídos correctos (`ff3020`, degradado, `202020`, franja `000000`); 1 fragment program generado en runtime; 600 cuadros, 17,4 ms de media; captura con los dos triángulos y el texto; `RESULT: OK` |
+| 2026-10-18 | `iso` | RPCS3 v0.0.42 | FAIL: no encontró `/dev_hdd0/tmp/gcps3/patron.bin`. RPCS3 vacía `dev_hdd0/tmp` al arrancar cada programa: los datos pasan a `/dev_hdd0/gcps3` (D-023) y se repite |
 
-Se llenan conforme se ejecutan las pruebas. Las cifras de rendimiento van también en [perf-log.md](perf-log.md).
+Se llenan conforme se ejecutan las pruebas. Los tiempos medidos en RPCS3 dependen de la PC y no cuentan como rendimiento; las cifras de la consola van en [perf-log.md](perf-log.md).
