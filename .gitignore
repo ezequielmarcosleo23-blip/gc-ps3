@@ -2,6 +2,9 @@
 /build/
 /build-docker/
 
+# Logs recibidos de la consola o de RPCS3 (tools/logrecv)
+/logs/
+
 # Archivos de prueba grandes generados localmente (p. ej. la ISO sintética de la Fase 0)
 /tests/phase0/data/
 

@@ -55,5 +55,6 @@ typedef struct test_case {
 /* Cada archivo de pruebas expone su lista terminada en {NULL, NULL}. */
 extern const test_case_t endian_tests[];
 extern const test_case_t backend_tests[];
+extern const test_case_t logline_tests[];
 
 #endif

@@ -25,6 +25,7 @@ int test_failures = 0;
 static const test_case_t *const suites[] = {
     endian_tests,
     backend_tests,
+    logline_tests,
 };
 
 int main(void)

@@ -7,7 +7,7 @@ FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates curl make gcc libc6-dev \
+        ca-certificates curl make gcc libc6-dev python3 \
         libelf1t64 zlib1g libgmp10 libssl3t64 libzstd1 \
     && rm -rf /var/lib/apt/lists/*
 

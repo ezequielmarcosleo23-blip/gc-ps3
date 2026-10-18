@@ -2,3 +2,4 @@ build/
 build-docker/
 .git/
 tests/phase0/data/
+logs/

@@ -1,6 +1,10 @@
 # El repo vive en Windows pero se compila en Linux: todo el texto va con LF.
 * text=auto eol=lf
 
+# Scripts de Windows con CRLF
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
 *.png binary
 *.pkg binary
 *.self binary

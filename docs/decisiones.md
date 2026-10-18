@@ -19,3 +19,6 @@ Una entrada por decisión, con la fecha, lo elegido y por qué. Si una decisión
 | D-013 | 2026-10-18 | Logger UDP propio y mínimo | La licencia de dbglogger está sin revisar |
 | D-014 | 2026-10-18 | Prueba `iso` de la Fase 0 con un archivo sintético de 1.4 GB | Se verifica cada byte sin copia de referencia y sin problemas legales; la ISO real llega en la Fase 1 |
 | D-015 | 2026-10-18 | Fase 0 solo en la consola HEN; las pruebas que requieren CFW/DEX quedan pendientes | Por ahora solo hay una consola con HEN |
+| D-016 | 2026-10-18 | RPCS3 como consola provisional para validar lo funcional | La consola HEN quedó fuera de servicio; JIT y rendimiento esperan al hardware |
+| D-017 | 2026-10-18 | El log se envía a broadcast y a 127.0.0.1 (o a la IP de `log.cfg`) y el receptor descarta duplicados | Funciona sin configurar nada en RPCS3 y en la red local |
+| D-018 | 2026-10-18 | Dos receptores con el mismo formato: `logrecv.py` (WSL/CI) y `logrecv.ps1` (Windows) | En Windows no hace falta instalar nada ni cambiar la red de WSL para usar RPCS3 |

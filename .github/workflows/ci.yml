@@ -39,4 +39,5 @@ jobs:
             build/ps3/gc-ps3.fake.self
             build/ps3/gc-ps3.pkg
             build/ps3/gc-ps3.gnpdrm.pkg
+            build/phase0/*.self
           if-no-files-found: error

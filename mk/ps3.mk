@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
-# App de PS3 (PPU) con PSL1GHT: .elf -> .self (+ .fake.self) -> .pkg
+# Apps de PS3 (PPU) con PSL1GHT: .elf -> .self (+ .fake.self) -> .pkg
 # Replica los pasos de $(PSL1GHT)/ppu_rules sin el make recursivo de los samples.
+#
+#   build/ps3/gc-ps3.self          app principal (src/platform/ps3/main.c)
+#   build/phase0/<prueba>.self     una por carpeta de tests/phase0/ (salvo common/)
 
 PPU_BIN     := $(PS3DEV)/ppu/bin
 PPU_CC      := $(PPU_BIN)/ppu-gcc
@@ -10,24 +13,45 @@ PPU_STRIP   := $(PPU_BIN)/ppu-strip
 
 PPU_MACHDEP := -mcpu=cell -mhard-float -fmodulo-sched -ffunction-sections -fdata-sections
 PPU_INC     := -I$(PSL1GHT)/ppu/include -I$(PSL1GHT)/ppu/include/simdmath \
-               -Isrc -Iinclude -Ilib/ps3mapi-lib/include -I$(BUILD)/ps3/gen
+               -Isrc -Iinclude -Itests/phase0 -Ilib/ps3mapi-lib/include -I$(BUILD)/ps3/gen
 PPU_CFLAGS  := -O2 -g -Wall -Wextra -std=gnu11 $(PPU_MACHDEP) $(PPU_INC)
 # Código de terceros en lib/: sin -Wextra y con aliasing relajado (como su Makefile original)
 LIB_CFLAGS  := -O2 -g -Wall -std=gnu11 $(PPU_MACHDEP) $(PPU_INC) -DBIGENDIAN -fno-strict-aliasing
 PPU_LDFLAGS := $(PPU_MACHDEP) -L$(PSL1GHT)/ppu/lib
-PPU_LIBS    := -lsysutil -lrt -llv2 -lm
+PPU_LIBS    := -lnet -lsysmodule -lsysutil -lrt -llv2 -lm
 
-PS3_SRCS  := $(wildcard src/platform/ps3/*.c) $(wildcard src/core/*.c)
-LIB_SRCS  := $(wildcard lib/ps3mapi-lib/source/*.c)
-PS3_OBJS  := $(PS3_SRCS:%.c=$(BUILD)/ps3/obj/%.o)
-LIB_OBJS  := $(LIB_SRCS:%.c=$(BUILD)/ps3/obj/%.o)
-SPU_BLOBS := $(SPU_PROGS:%=$(BUILD)/ps3/gen/spu_%.bin.o)
-SPU_HDRS  := $(SPU_PROGS:%=$(BUILD)/ps3/gen/spu_%_bin.h)
+# Código compartido por todas las apps: núcleo + plataforma PS3 (sin el main de la app)
+PS3_SHARED_SRCS := $(filter-out src/platform/ps3/main.c,$(wildcard src/platform/ps3/*.c)) \
+                   $(wildcard src/core/*.c)
+LIB_SRCS        := $(wildcard lib/ps3mapi-lib/source/*.c)
+PS3_SHARED_OBJS := $(PS3_SHARED_SRCS:%.c=$(BUILD)/ps3/obj/%.o)
+LIB_OBJS        := $(LIB_SRCS:%.c=$(BUILD)/ps3/obj/%.o)
+SPU_BLOBS       := $(SPU_PROGS:%=$(BUILD)/ps3/gen/spu_%.bin.o)
+SPU_HDRS        := $(SPU_PROGS:%=$(BUILD)/ps3/gen/spu_%_bin.h)
+PPU_COMMON      := $(PS3_SHARED_OBJS) $(LIB_OBJS) $(SPU_BLOBS)
 
+# --- app principal ------------------------------------------------------------
 PS3_ELF      := $(BUILD)/ps3/$(APP).elf
 PS3_STRIPPED := $(BUILD)/ps3/$(APP).stripped.elf
 PS3_SELF     := $(BUILD)/ps3/$(APP).self
 PS3_PKG      := $(BUILD)/ps3/$(APP).pkg
+PS3_MAIN_OBJ := $(BUILD)/ps3/obj/src/platform/ps3/main.o
+
+$(PS3_ELF): $(PS3_MAIN_OBJ) $(PPU_COMMON)
+	$(PPU_CC) $^ $(PPU_LDFLAGS) $(PPU_LIBS) -Wl,-Map,$@.map -o $@
+
+# --- pruebas de la Fase 0 -----------------------------------------------------
+PHASE0_TESTS       := $(filter-out common,$(notdir $(patsubst %/,%,$(wildcard tests/phase0/*/))))
+PHASE0_COMMON_OBJS := $(patsubst %.c,$(BUILD)/ps3/obj/%.o,$(wildcard tests/phase0/common/*.c))
+PHASE0_SELFS       := $(PHASE0_TESTS:%=$(BUILD)/phase0/%.self)
+
+define PHASE0_template
+PHASE0_OBJS_$(1) := $$(patsubst %.c,$(BUILD)/ps3/obj/%.o,$$(wildcard tests/phase0/$(1)/*.c))
+$(BUILD)/phase0/$(1).elf: $$(PHASE0_OBJS_$(1)) $(PHASE0_COMMON_OBJS) $(PPU_COMMON)
+	@mkdir -p $$(dir $$@)
+	$(PPU_CC) $$^ $(PPU_LDFLAGS) $(PPU_LIBS) -Wl,-Map,$$@.map -o $$@
+endef
+$(foreach t,$(PHASE0_TESTS),$(eval $(call PHASE0_template,$(t))))
 
 # --- programas SPE incrustados ------------------------------------------------
 $(BUILD)/ps3/gen/spu_%.bin: $(BUILD)/spu/%.elf
@@ -50,17 +74,14 @@ $(BUILD)/ps3/obj/%.o: %.c | $(SPU_HDRS)
 	@mkdir -p $(dir $@)
 	$(PPU_CC) $(PPU_CFLAGS) -MMD -MP -c $< -o $@
 
--include $(PS3_OBJS:.o=.d) $(LIB_OBJS:.o=.d)
+-include $(wildcard $(BUILD)/ps3/obj/*/*.d $(BUILD)/ps3/obj/*/*/*.d $(BUILD)/ps3/obj/*/*/*/*.d $(BUILD)/ps3/obj/*/*/*/*/*.d)
 
-# --- enlazado, SELF y PKG -----------------------------------------------------
-$(PS3_ELF): $(PS3_OBJS) $(LIB_OBJS) $(SPU_BLOBS)
-	$(PPU_CC) $^ $(PPU_LDFLAGS) $(PPU_LIBS) -Wl,-Map,$@.map -o $@
-
-$(PS3_SELF): $(PS3_ELF)
-	$(PPU_STRIP) $< -o $(PS3_STRIPPED)
-	$(PS3_TOOLS)/sprxlinker $(PS3_STRIPPED)
-	$(PS3_TOOLS)/make_self $(PS3_STRIPPED) $@
-	$(PS3_TOOLS)/fself $(PS3_STRIPPED) $(basename $@).fake.self
+# --- SELF y PKG (cualquier app) -----------------------------------------------
+%.self: %.elf
+	$(PPU_STRIP) $< -o $*.stripped.elf
+	$(PS3_TOOLS)/sprxlinker $*.stripped.elf
+	$(PS3_TOOLS)/make_self $*.stripped.elf $@ > /dev/null
+	$(PS3_TOOLS)/fself $*.stripped.elf $*.fake.self > /dev/null
 
 $(PS3_PKG): $(PS3_SELF)
 	rm -rf $(BUILD)/ps3/pkg && mkdir -p $(BUILD)/ps3/pkg/USRDIR

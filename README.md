@@ -11,8 +11,11 @@ Requisitos: Linux (o Ubuntu en WSL) con el toolchain `nightly-2026-10-12` de ps3
 ```bash
 make                 # app de PS3 (build/ps3/gc-ps3.self) y runner de PC
 make test            # pruebas unitarias en PC con ASan + UBSan
+make phase0          # pruebas de la Fase 0 para consola o RPCS3 (build/phase0/*.self)
+make logrecv         # recibe el log UDP de la consola (en Windows: tools\logrecv.cmd)
 make pkg             # paquete instalable (build/ps3/gc-ps3.pkg)
 make run PS3LOAD=tcp:192.168.1.50   # envía el .self a ps3loadx en la consola
+make run-test TEST=hello PS3LOAD=tcp:192.168.1.50   # envía una prueba y espera su RESULT
 make toolchain-check # comprueba que el toolchain es el fijado en tools/toolchain.env
 make docker-make     # compila todo dentro de la imagen Docker, igual que el CI
 ```
