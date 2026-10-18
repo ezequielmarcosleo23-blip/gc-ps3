@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: PPU + SPU, pruebas en PC y .pkg
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Imagen de build (con caché)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          tags: gc-ps3-build:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Compilar y probar
+        run: |
+          docker run --rm -v "$PWD":/src -w /src gc-ps3-build:ci \
+            make -j"$(nproc)" toolchain-check all test pkg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gc-ps3-${{ github.sha }}
+          path: |
+            build/ps3/gc-ps3.elf
+            build/ps3/gc-ps3.self
+            build/ps3/gc-ps3.fake.self
+            build/ps3/gc-ps3.pkg
+            build/ps3/gc-ps3.gnpdrm.pkg
+          if-no-files-found: error

@@ -1,0 +1,9 @@
+# El repo vive en Windows pero se compila en Linux: todo el texto va con LF.
+* text=auto eol=lf
+
+*.png binary
+*.pkg binary
+*.self binary
+*.elf binary
+*.bin binary
+*.iso binary

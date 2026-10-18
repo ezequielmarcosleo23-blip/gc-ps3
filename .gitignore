@@ -1,0 +1,12 @@
+# Salidas de build
+/build/
+/build-docker/
+
+# Archivos de prueba grandes generados localmente (p. ej. la ISO sintética de la Fase 0)
+/tests/phase0/data/
+
+# Editores y sistema
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
