@@ -6,7 +6,7 @@
 SPU_CC      := $(PS3DEV)/spu/bin/spu-gcc
 SPU_MACHDEP := -mdual-nops -fmodulo-sched -ffunction-sections -fdata-sections
 SPU_CFLAGS  := -O2 -g -Wall -Wextra -std=gnu11 $(SPU_MACHDEP) \
-               -I$(PSL1GHT)/spu/include -Isrc
+               -I$(PSL1GHT)/spu/include -Isrc -Ilib/spukit/include
 SPU_LDFLAGS := $(SPU_MACHDEP) -L$(PSL1GHT)/spu/lib
 SPU_LIBS    := -lsputhread
 

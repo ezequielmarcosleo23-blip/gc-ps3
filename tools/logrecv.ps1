@@ -2,7 +2,8 @@
 #
 # Receptor del log UDP de gc-ps3 para Windows (PowerShell 5.1 o 7), sin instalar nada.
 # Mismo formato y comportamiento que tools/logrecv.py: un archivo por ejecucion en logs\,
-# descarta duplicados y cuenta lineas perdidas.
+# descarta duplicados y cuenta lineas perdidas. Las lineas de nivel D (detalle) se guardan
+# en el archivo sin mostrarlas; solo se avisa cuantas llegaron.
 #
 #   tools\logrecv.cmd                      escucha hasta Ctrl+C
 #   tools\logrecv.cmd -UntilResult         termina con el RESULT: 0 OK, 1 FAIL, 2 tiempo agotado
@@ -19,7 +20,7 @@ $ErrorActionPreference = 'Stop'
 if (-not $Out) { $Out = Join-Path (Split-Path -Parent $PSScriptRoot) 'logs' }
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
 
-$re = '^GCPS3 ([0-9a-f]{8}) (\d+) (\d+) ([IWER]) ([a-z0-9_-]{1,31}) \| (.*)$'
+$re = '^GCPS3 ([0-9a-f]{8}) (\d+) (\d+) ([IWERD]) ([a-z0-9_-]{1,31}) \| (.*)$'
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 $sessions = @{}
 
@@ -29,8 +30,18 @@ function Get-Summary($s) {
     return "$($s.Test): $result | $($s.Seen.Count) lineas, $lost perdidas, $($s.Dups) duplicadas -> $($s.Path)"
 }
 
+# Lineas D guardadas sin mostrar desde el ultimo aviso
+function Show-Hidden($s) {
+    if ($s.Hidden -gt 0) {
+        Write-Host "[$($s.Test)] ... $($s.Hidden) lineas de detalle (D) guardadas en el archivo"
+        $s.Hidden = 0
+    }
+}
+
 $udp = New-Object System.Net.Sockets.UdpClient($Port)
 $udp.Client.ReceiveTimeout = 500
+# Las rafagas sin pausa llegan mas rapido de lo que se escriben: buffer grande
+$udp.Client.ReceiveBufferSize = 8MB
 $remote = New-Object System.Net.IPEndPoint([System.Net.IPAddress]::Any, 0)
 $start = Get-Date
 $tail = if ($UntilResult) { '' } else { ' (Ctrl+C para salir)' }
@@ -49,7 +60,10 @@ try {
         } catch {
             # Timeout de 500 ms (Windows PowerShell 5.1 lo envuelve en MethodInvocationException)
             $e = $_.Exception
-            if ($e -is [System.Net.Sockets.SocketException] -or $e.InnerException -is [System.Net.Sockets.SocketException]) { continue }
+            if ($e -is [System.Net.Sockets.SocketException] -or $e.InnerException -is [System.Net.Sockets.SocketException]) {
+                foreach ($s in $sessions.Values) { $s.Writer.Flush(); Show-Hidden $s }
+                continue
+            }
             throw
         }
         $line = $utf8.GetString($bytes).TrimEnd("`r", "`n")
@@ -67,14 +81,18 @@ try {
 
         if (-not $sessions.ContainsKey($sid)) {
             $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+            $path = Join-Path $Out "$($stamp)_$($test)_$($sid).log"
             $sessions[$sid] = [pscustomobject]@{
                 Test   = $test
-                Path   = Join-Path $Out "$($stamp)_$($test)_$($sid).log"
+                Path   = $path
+                Writer = New-Object System.IO.StreamWriter($path, $true, $utf8)
                 Seen   = New-Object 'System.Collections.Generic.HashSet[uint32]'
                 MaxSeq = -1
                 Dups   = 0
+                Hidden = 0
                 Result = $null
             }
+            $sessions[$sid].Writer.NewLine = "`n"
             Write-Host "== nueva ejecucion de '$test' desde $($remote.Address) (sesion $sid)"
         }
         $s = $sessions[$sid]
@@ -83,7 +101,13 @@ try {
             continue
         }
         if ([int64]$seq -gt $s.MaxSeq) { $s.MaxSeq = [int64]$seq }
-        [System.IO.File]::AppendAllText($s.Path, $line + "`n", $utf8)
+        $s.Writer.WriteLine($line)
+        if ($level -eq 'D') {
+            $s.Hidden++
+            continue
+        }
+        $s.Writer.Flush()
+        Show-Hidden $s
 
         $mark = ''
         if ($level -eq 'W') { $mark = 'AVISO ' } elseif ($level -eq 'E') { $mark = 'ERROR ' }
@@ -100,6 +124,7 @@ try {
     }
 } finally {
     $udp.Close()
+    foreach ($s in $sessions.Values) { $s.Writer.Close() }
     if (-not $UntilResult) {
         foreach ($s in $sessions.Values) { Write-Host ('== ' + (Get-Summary $s)) }
     }

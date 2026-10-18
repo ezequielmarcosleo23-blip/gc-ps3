@@ -16,7 +16,7 @@ Cuánta memoria de la PS3 usa cada parte del emulador. Se completa con medicione
 | --- | --- | --- | --- |
 | MEM1 emulada | XDR (principal) | 24 MB | por medir disponibilidad en el proceso |
 | ARAM emulada | XDR | 16 MB | por medir |
-| Caché de código del JIT (cola NOBITS) | XDR | por definir en la prueba `jit` | por medir |
+| Caché de código del JIT (cola NOBITS) | XDR | 32 MB en la prueba `jit` (alcance de un salto relativo) | por medir |
 | Búferes de la ISO (streaming) | XDR | por definir en la prueba `iso` | por medir |
 | Framebuffers, texturas y programas del RSX | GDDR3 (local del RSX) | por definir en la prueba `rsx` | por medir |
 | Local store de cada SPE | 256 KB por SPE | código + datos + doble búfer DMA | por medir en la prueba `spu` |

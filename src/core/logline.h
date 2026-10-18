@@ -26,7 +26,8 @@
  * - sesión: identifica una ejecución; el receptor separa los logs por sesión.
  * - secuencia: empieza en 0 y sube de 1 en 1; un hueco = datagrama perdido.
  * - t_us: microsegundos desde el inicio del log en la consola.
- * - nivel: I (info), W (aviso), E (error), R (resultado final).
+ * - nivel: I (info), W (aviso), E (error), R (resultado final), D (detalle:
+ *   va al archivo pero los receptores no lo muestran; para ráfagas de datos).
  * - prueba: [a-z0-9_-], hasta 31 caracteres.
  * Ver docs/log-udp.md. tools/logrecv.py implementa el mismo formato.
  */
@@ -53,7 +54,7 @@ typedef struct logline {
 /* 1 si el nombre de prueba es válido ([a-z0-9_-], 1..31 caracteres). */
 int logline_valid_test_name(const char *test);
 
-/* 1 si el nivel es uno de I, W, E, R. */
+/* 1 si el nivel es uno de I, W, E, R, D. */
 int logline_valid_level(char level);
 
 /*

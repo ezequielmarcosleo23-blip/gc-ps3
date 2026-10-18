@@ -41,5 +41,6 @@ int phase0_main(const char *name, phase0_test_fn fn);
 #define LOGI(...) udplog_printf('I', __VA_ARGS__)
 #define LOGW(...) udplog_printf('W', __VA_ARGS__)
 #define LOGE(...) udplog_printf('E', __VA_ARGS__)
+#define LOGD(...) udplog_printf('D', __VA_ARGS__)   /* solo UDP y archivo, sin pantalla */
 
 #endif

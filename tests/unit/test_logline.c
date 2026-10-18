@@ -66,6 +66,15 @@ static void test_newlines_flattened(void)
     CHECK(strchr(buf, '\n') == NULL && strchr(buf, '\r') == NULL);
 }
 
+static void test_detail_level(void)
+{
+    char buf[LOGLINE_MAX];
+    logline_t l;
+    CHECK(logline_format(buf, sizeof buf, 0xbeef, 9, 2000, 'D', "udplog", "r1 9/10000") > 0);
+    CHECK(strcmp(buf, "GCPS3 0000beef 9 2000 D udplog | r1 9/10000") == 0);
+    CHECK(logline_parse(buf, &l) == 0 && l.level == 'D');
+}
+
 static void test_reject_invalid(void)
 {
     char buf[LOGLINE_MAX];
@@ -85,6 +94,7 @@ const test_case_t logline_tests[] = {
     { "logline: ida y vuelta",          test_parse_roundtrip },
     { "logline: mensaje largo truncado", test_truncate_long_message },
     { "logline: sin saltos de línea",   test_newlines_flattened },
+    { "logline: nivel D (detalle)",     test_detail_level },
     { "logline: rechaza líneas malas",  test_reject_invalid },
     { NULL, NULL },
 };

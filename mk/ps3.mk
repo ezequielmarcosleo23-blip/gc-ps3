@@ -13,7 +13,8 @@ PPU_STRIP   := $(PPU_BIN)/ppu-strip
 
 PPU_MACHDEP := -mcpu=cell -mhard-float -fmodulo-sched -ffunction-sections -fdata-sections
 PPU_INC     := -I$(PSL1GHT)/ppu/include -I$(PSL1GHT)/ppu/include/simdmath \
-               -Isrc -Iinclude -Itests/phase0 -Ilib/ps3mapi-lib/include -I$(BUILD)/ps3/gen
+               -Isrc -Iinclude -Itests/phase0 -Ilib/ps3mapi-lib/include \
+               -Ilib/spukit/include -Ilib/rsxkit/include -I$(BUILD)/ps3/gen
 PPU_CFLAGS  := -O2 -g -Wall -Wextra -std=gnu11 $(PPU_MACHDEP) $(PPU_INC)
 # Código de terceros en lib/: sin -Wextra y con aliasing relajado (como su Makefile original)
 LIB_CFLAGS  := -O2 -g -Wall -std=gnu11 $(PPU_MACHDEP) $(PPU_INC) -DBIGENDIAN -fno-strict-aliasing
@@ -30,6 +31,19 @@ SPU_BLOBS       := $(SPU_PROGS:%=$(BUILD)/ps3/gen/spu_%.bin.o)
 SPU_HDRS        := $(SPU_PROGS:%=$(BUILD)/ps3/gen/spu_%_bin.h)
 PPU_COMMON      := $(PS3_SHARED_OBJS) $(LIB_OBJS) $(SPU_BLOBS)
 
+# --- librerías con su propio Makefile (lib/spukit, lib/rsxkit) ----------------
+# Se compilan con su Makefile original en $(BUILD)/lib/<nombre>. rsxkit necesita
+# cgcomp, que carga libCg.so (paquete libcg de Ubuntu multiverse).
+KIT_ENV  := PATH="$(PS3DEV)/bin:$(PS3DEV)/ppu/bin:$(PS3DEV)/spu/bin:$$PATH"
+SPUKIT_A := $(BUILD)/lib/spukit/libspukit.a
+RSXKIT_A := $(BUILD)/lib/rsxkit/librsxkit.a
+
+$(SPUKIT_A): $(wildcard lib/spukit/Makefile lib/spukit/src/*.c lib/spukit/include/spukit/*.h)
+	$(KIT_ENV) $(MAKE) --no-print-directory -C lib/spukit OUT=$(abspath $(BUILD))/lib/spukit
+
+$(RSXKIT_A): $(wildcard lib/rsxkit/Makefile lib/rsxkit/src/*.[ch] lib/rsxkit/include/rsxkit/*.h lib/rsxkit/shaders/*.[vf]cg)
+	$(KIT_ENV) $(MAKE) --no-print-directory -C lib/rsxkit OUT=$(abspath $(BUILD))/lib/rsxkit
+
 # --- app principal ------------------------------------------------------------
 PS3_ELF      := $(BUILD)/ps3/$(APP).elf
 PS3_STRIPPED := $(BUILD)/ps3/$(APP).stripped.elf
@@ -45,11 +59,18 @@ PHASE0_TESTS       := $(filter-out common,$(notdir $(patsubst %/,%,$(wildcard te
 PHASE0_COMMON_OBJS := $(patsubst %.c,$(BUILD)/ps3/obj/%.o,$(wildcard tests/phase0/common/*.c))
 PHASE0_SELFS       := $(PHASE0_TESTS:%=$(BUILD)/phase0/%.self)
 
+# Librerías extra de cada prueba (van antes de las de PSL1GHT al enlazar)
+PHASE0_LIBS_spu := $(SPUKIT_A)
+PHASE0_LIBS_rsx := $(RSXKIT_A) -lrsx -lgcm_sys -lio
+# Opciones de enlace extra: jit agrega la cola NOBITS al segmento de texto
+PHASE0_LDFLAGS_jit := -T tests/phase0/jit/nobits.ld -T lv2.ld
+PHASE0_LDDEPS_jit  := tests/phase0/jit/nobits.ld
+
 define PHASE0_template
 PHASE0_OBJS_$(1) := $$(patsubst %.c,$(BUILD)/ps3/obj/%.o,$$(wildcard tests/phase0/$(1)/*.c))
-$(BUILD)/phase0/$(1).elf: $$(PHASE0_OBJS_$(1)) $(PHASE0_COMMON_OBJS) $(PPU_COMMON)
+$(BUILD)/phase0/$(1).elf: $$(PHASE0_OBJS_$(1)) $(PHASE0_COMMON_OBJS) $(PPU_COMMON) $$(filter %.a,$$(PHASE0_LIBS_$(1))) $$(PHASE0_LDDEPS_$(1))
 	@mkdir -p $$(dir $$@)
-	$(PPU_CC) $$^ $(PPU_LDFLAGS) $(PPU_LIBS) -Wl,-Map,$$@.map -o $$@
+	$(PPU_CC) $$(filter %.o,$$^) $$(PHASE0_LIBS_$(1)) $(PPU_LDFLAGS) $$(PHASE0_LDFLAGS_$(1)) $(PPU_LIBS) -Wl,-Map,$$@.map -o $$@
 endef
 $(foreach t,$(PHASE0_TESTS),$(eval $(call PHASE0_template,$(t))))
 

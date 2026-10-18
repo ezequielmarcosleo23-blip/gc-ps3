@@ -6,7 +6,7 @@ Emulador de GameCube para PlayStation 3, escrito en C11 sobre [PSL1GHT](https://
 
 ## Compilar
 
-Requisitos: Linux (o Ubuntu en WSL) con el toolchain `nightly-2026-10-12` de ps3dev en `/usr/local/ps3dev` y las variables `PS3DEV` y `PSL1GHT` definidas.
+Requisitos: Linux (o Ubuntu en WSL) con el toolchain `nightly-2026-10-12` de ps3dev en `/usr/local/ps3dev`, las variables `PS3DEV` y `PSL1GHT` definidas y `libcg` instalado (`sudo apt install libcg`; lo usa `cgcomp` para los shaders de rsxkit).
 
 ```bash
 make                 # app de PS3 (build/ps3/gc-ps3.self) y runner de PC
@@ -16,7 +16,8 @@ make logrecv         # recibe el log UDP de la consola (en Windows: tools\logrec
 make pkg             # paquete instalable (build/ps3/gc-ps3.pkg)
 make run PS3LOAD=tcp:192.168.1.50   # envía el .self a ps3loadx en la consola
 make run-test TEST=hello PS3LOAD=tcp:192.168.1.50   # envía una prueba y espera su RESULT
-make toolchain-check # comprueba que el toolchain es el fijado en tools/toolchain.env
+make toolchain-check # comprueba el toolchain fijado en tools/toolchain.env y cgcomp
+python3 tools/mkiso.py patron.bin   # archivo de 1.4 GB para la prueba iso
 make docker-make     # compila todo dentro de la imagen Docker, igual que el CI
 ```
 

@@ -40,12 +40,14 @@ test: $(HOST_TESTS) $(HOST_RUNNER)
 	$(HOST_TESTS)
 	$(HOST_RUNNER) --version
 	python3 tools/logrecv.py --selftest
+	python3 tools/udplog_stats.py --selftest
+	python3 tools/mkiso.py --selftest
 
 run: $(PS3_SELF)
 	@if [ -z "$(PS3LOAD)" ]; then echo "Falta PS3LOAD, por ejemplo: make run PS3LOAD=tcp:192.168.1.50"; exit 1; fi
 	PS3LOAD=$(PS3LOAD) $(PS3DEV)/bin/ps3load $(PS3_SELF)
 
-LOGRECV_TIMEOUT ?= 120
+LOGRECV_TIMEOUT ?= 300   # udplog dura unos 2 minutos
 
 logrecv:
 	python3 tools/logrecv.py --out logs
@@ -69,7 +71,11 @@ toolchain-check:
 	echo "tag instalado: $$tag"; \
 	$(PPU_CC) --version | head -n1; \
 	$(SPU_CC) --version | head -n1; \
-	[ "$$tag" = "$(PS3DEV_TAG)" ] || { echo "ERROR: el toolchain no coincide con tools/toolchain.env"; exit 1; }
+	[ "$$tag" = "$(PS3DEV_TAG)" ] || { echo "ERROR: el toolchain no coincide con tools/toolchain.env"; exit 1; }; \
+	printf 'void main(float4 p : POSITION, out float4 o : POSITION) { o = p; }\n' > /tmp/gcps3-cg.vcg; \
+	if $(PS3DEV)/bin/cgcomp -v /tmp/gcps3-cg.vcg /tmp/gcps3-cg.vpo > /dev/null 2>&1; then echo "cgcomp      : OK (libCg)"; \
+	else echo "ERROR: cgcomp no carga libCg.so; instalar con: sudo apt install libcg"; rm -f /tmp/gcps3-cg.*; exit 1; fi; \
+	rm -f /tmp/gcps3-cg.*
 
 DOCKER_IMAGE := gc-ps3-build:$(PS3DEV_TAG)
 

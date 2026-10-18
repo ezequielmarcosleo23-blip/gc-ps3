@@ -38,7 +38,7 @@ int logline_valid_test_name(const char *test)
 
 int logline_valid_level(char level)
 {
-    return level == 'I' || level == 'W' || level == 'E' || level == 'R';
+    return level == 'I' || level == 'W' || level == 'E' || level == 'R' || level == 'D';
 }
 
 int logline_format(char *buf, size_t size, uint32_t session, uint32_t seq,

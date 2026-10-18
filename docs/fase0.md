@@ -7,19 +7,19 @@
 | Etapa | Contenido | Estado |
 | --- | --- | --- |
 | A. Repo y build | Esqueleto GPLv2+, Makefile PPU/SPU/PC, ps3mapi-lib fijada, imagen Docker, GitHub Actions | Completa (2026-10-18): CI verde, prueba de humo OK en RPCS3 |
-| B. Base de pruebas | Detección de entorno, log por UDP con `RESULT: OK/FAIL`, receptores en la PC, `make run-test` | En curso: validación en RPCS3 mientras no haya consola |
-| C. Las 5 pruebas | `udplog`, `jit`, `spu`, `rsx`, `iso` | Pendiente |
+| B. Base de pruebas | Detección de entorno, log por UDP con `RESULT: OK/FAIL`, receptores en la PC, `make run-test` | Validada en RPCS3 (2026-10-18); falta la parte de consola: ps3load, buzzer, HEN |
+| C. Las 5 pruebas | `udplog`, `jit`, `spu`, `rsx`, `iso` | Escritas y compiladas (2026-10-18); falta correrlas en RPCS3 (`jit`, en consola) |
 | D. Cierre | Resultados, `perf-log.md`, decisiones y plan de la Fase 1 | Pendiente |
 
 ## Pruebas en consola
 
 | # | Prueba | Qué hace | Éxito | HEN | DEX |
 | --- | --- | --- | --- | --- | --- |
-| 1 | `udplog` | 10 000 mensajes numerados a distintas velocidades | 0 perdidos a ritmo normal; latencia medida | — | — |
-| 2 | `jit` | Escribe, ejecuta, modifica y vuelve a ejecutar una función PPC. Métodos: cola NOBITS, syscall 905, `page_allocate`. Marca de crash en disco; prueba `sys/dbg.h` | Cada método da OK/FAIL sin colgar la consola | — | pendiente (sin consola DEX) |
-| 3 | `spu` | Vértices por DMA → transformación 4×4 → DMA de regreso; hilos SPU directos y spukit | Bit a bit igual al PPU; vértices/s | — | — |
-| 4 | `rsx` | Triángulo con rsxkit (programas generados en runtime, sin Cg), 720p con RESC | Triángulo en pantalla; tiempo por frame | — | — |
-| 5 | `iso` | Archivo sintético de 1.4 GB desde HDD y USB: secuencial, aleatorio de 32 KB y CRC | Íntegro y muy por encima de ~3 MB/s | — | — |
+| 1 | `udplog` | 3 ráfagas de 10 000 líneas (sin pausa, 1000/s, 100/s) y 4 hilos a la vez; `tools/udplog_stats.py` cuenta las perdidas de cada una | 0 perdidas a 1000/s, 100/s y con hilos; costo por línea medido | — | — |
+| 2 | `jit` | Escribe, ejecuta, modifica y vuelve a ejecutar una función PPC en una cola NOBITS de 32 MB; marca de crash en disco. Después: syscall 905, `page_allocate` y `sys/dbg.h` | Cada método da OK/FAIL sin colgar la consola | — | pendiente (sin consola DEX) |
+| 3 | `spu` | 64 000 vértices × matriz 4×4 con DMA de doble búfer: hilo SPU directo, spukit con 1 y con 4 trabajadores | Bit a bit igual al PPU con valores exactos; vértices/s; con valores cualquiera se informan las ULP de diferencia | — | — |
+| 4 | `rsx` | Destino de 640×480 (el EFB) con dos triángulos, uno con fragment program generado en runtime, presentado a 4:3 sobre 720p con texto | Píxeles correctos leídos del búfer de color, captura de pantalla; tiempo por cuadro | — | — |
+| 5 | `iso` | Archivo de 1 459 978 240 bytes (`tools/mkiso.py`, cada palabra = su posición) desde HDD y USB: secuencial de 1 MB y 1000 lecturas de 32 KB al azar, verificando cada byte | Íntegro y muy por encima de ~3 MB/s | — | — |
 
 ## Sin consola por ahora
 
@@ -32,10 +32,23 @@ La consola HEN quedó fuera de servicio el 2026-10-18. Mientras tanto RPCS3 hace
 | `udplog`, `spu`, `rsx`, `iso` | Solo que funcionen | Rendimiento |
 | `jit` | — | Sí |
 
+## Cómo correr cada prueba en RPCS3
+
+Siempre con `tools\logrecv.cmd` abierto y File → Boot (S)ELF → `build\phase0\<prueba>.self` (ver [log-udp.md](log-udp.md)).
+
+| Prueba | Antes de arrancarla | Dura | Después |
+| --- | --- | --- | --- |
+| `udplog` | — | ~2 min | `python3 tools/udplog_stats.py` en Ubuntu (lee el log más reciente) |
+| `spu` | — | segundos | — |
+| `iso` | Generar el archivo en `dev_hdd0/tmp/gcps3/patron.bin` de RPCS3: `python3 tools/mkiso.py <ruta>` | según el disco | — |
+| `rsx` | Configuration → GPU → **Write Color Buffers** activado (si no, la lectura de píxeles da FAIL) | 10 s | Captura de pantalla |
+| `jit` | Solo en consola | — | — |
+
 ## Resultados
 
 | Fecha | Prueba | Dónde | Resultado |
 | --- | --- | --- | --- |
 | 2026-10-18 | Prueba de humo de la app (`gc-ps3.self`) | RPCS3 v0.0.42 | `spu: hello OK (1.5 6.0 0.0 44.0)`, `RESULT: OK` |
+| 2026-10-18 | `hello`: log UDP hasta la PC (`logrecv.cmd`) | RPCS3 v0.0.42 | 13 líneas, 0 perdidas, 0 envíos fallidos; `RESULT: OK` |
 
 Se llenan conforme se ejecutan las pruebas. Las cifras de rendimiento van también en [perf-log.md](perf-log.md).

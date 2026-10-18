@@ -28,6 +28,7 @@
 #include <netinet/in.h>
 #include <net/net.h>
 #include <net/socket.h>
+#include <lv2/mutex.h>
 #include <sys/process.h>
 #include <sys/systime.h>
 
@@ -49,7 +50,21 @@ static struct {
     uint32_t           errors;
     uint64_t           tb0;
     uint64_t           tb_freq;
+    sys_lwmutex_t      lock;
+    int                locked_ok;      /* 1 si el lwmutex existe */
 } lg = { .sock = -1 };
+
+static void lock(void)
+{
+    if (lg.locked_ok)
+        sysLwMutexLock(&lg.lock, 0);
+}
+
+static void unlock(void)
+{
+    if (lg.locked_ok)
+        sysLwMutexUnlock(&lg.lock);
+}
 
 uint64_t udplog_now_us(void)
 {
@@ -94,6 +109,16 @@ static int read_config(void)
 
 int udplog_init(const char *test_name)
 {
+    if (!lg.locked_ok) {
+        sys_lwmutex_attr_t attr;
+        memset(&attr, 0, sizeof attr);
+        attr.attr_protocol = SYS_LWMUTEX_PROTOCOL_PRIO;
+        attr.attr_recursive = SYS_LWMUTEX_ATTR_NOT_RECURSIVE;
+        memcpy(attr.name, "udplog", 7);
+        lg.locked_ok = sysLwMutexCreate(&lg.lock, &attr) == 0;
+        if (!lg.locked_ok)
+            printf("udplog: sysLwMutexCreate fallo; el log no es seguro entre hilos\n");
+    }
     lg.tb_freq = sysGetTimebaseFrequency();
     lg.tb0 = __gettime();
     lg.session = (uint32_t)(lg.tb0 ^ (lg.tb0 >> 32) ^ ((uint64_t)sysProcessGetPid() << 16));
@@ -126,6 +151,7 @@ int udplog_init(const char *test_name)
     return 0;
 }
 
+/* Con lg.lock tomado. */
 static void send_line(char level, const char *msg)
 {
     char line[LOGLINE_MAX];
@@ -152,23 +178,30 @@ void udplog_printf(char level, const char *fmt, ...)
     vsnprintf(msg, sizeof msg, fmt, ap);
     va_end(ap);
 
-    printf("%s\n", msg);               /* copia en la TTY */
+    lock();
+    if (level != 'D')
+        printf("%s\n", msg);           /* copia en la TTY */
     send_line(level, msg);
+    unlock();
 }
 
 void udplog_result(int ok)
 {
     const char *msg = ok ? "RESULT: OK" : "RESULT: FAIL";
+    lock();
     printf("%s\n", msg);
     send_line('R', msg);
+    unlock();
 }
 
 void udplog_shutdown(void)
 {
     if (lg.sock >= 0) {
         sysUsleep(200 * 1000);         /* deja salir los últimos datagramas */
+        lock();
         close(lg.sock);
         lg.sock = -1;
+        unlock();
     }
     if (lg.net_up) {
         netDeinitialize();
@@ -176,6 +209,19 @@ void udplog_shutdown(void)
     }
 }
 
-uint32_t udplog_sent(void) { return lg.sent; }
-uint32_t udplog_send_errors(void) { return lg.errors; }
+uint32_t udplog_sent(void)
+{
+    lock();
+    uint32_t n = lg.sent;
+    unlock();
+    return n;
+}
+
+uint32_t udplog_send_errors(void)
+{
+    lock();
+    uint32_t n = lg.errors;
+    unlock();
+    return n;
+}
 const char *udplog_targets(void) { return lg.targets_txt; }
