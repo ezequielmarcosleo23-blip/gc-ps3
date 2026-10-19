@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | A. Repo y build | Esqueleto GPLv2+, Makefile PPU/SPU/PC, ps3mapi-lib fijada, imagen Docker, GitHub Actions | Completa (2026-10-18): CI verde, prueba de humo OK en RPCS3 |
 | B. Base de pruebas | Detección de entorno, log por UDP con `RESULT: OK/FAIL`, receptores en la PC, `make run-test` | Validada en RPCS3 (2026-10-18); falta la parte de consola: ps3load, buzzer, HEN |
-| C. Las 5 pruebas | `udplog`, `jit`, `spu`, `rsx`, `iso` | En RPCS3 (2026-10-18): `udplog`, `spu` y `rsx` OK; `iso` se repite con el archivo fuera de `tmp`; `jit` espera a la consola |
+| C. Las 5 pruebas | `udplog`, `jit`, `spu`, `rsx`, `iso` | Validada en RPCS3 (2026-10-18): `udplog`, `spu`, `rsx` e `iso` OK; `jit` y las cifras de rendimiento esperan a la consola |
 | D. Cierre | Resultados, `perf-log.md`, decisiones y plan de la Fase 1 | Pendiente |
 
 ## Pruebas en consola
@@ -54,5 +54,7 @@ Siempre con `tools\logrecv.cmd` abierto y File → Boot (S)ELF → `build\phase0
 | 2026-10-18 | `spu` | RPCS3 v0.0.42 | Con valores exactos, hilo directo, spukit x1 y x4 dan los mismos bits que el PPU. Con valores cualquiera difieren 161 848 de 256 000 componentes: lo esperado si la SPU redondea hacia cero (una simulación en la PC da 161 491); `RESULT: OK` |
 | 2026-10-18 | `rsx` | RPCS3 v0.0.42 (Write Color Buffers) | Salida 1280×720; destino 640×480 presentado en x=160, 960×720 (4:3); píxeles leídos correctos (`ff3020`, degradado, `202020`, franja `000000`); 1 fragment program generado en runtime; 600 cuadros, 17,4 ms de media; captura con los dos triángulos y el texto; `RESULT: OK` |
 | 2026-10-18 | `iso` | RPCS3 v0.0.42 | FAIL: no encontró `/dev_hdd0/tmp/gcps3/patron.bin`. RPCS3 vacía `dev_hdd0/tmp` al arrancar cada programa: los datos pasan a `/dev_hdd0/gcps3` (D-023) y se repite |
+| 2026-10-18 | `spu` (repetida, nueva métrica) | RPCS3 v0.0.42 | Igual que antes con valores exactos. Con valores cualquiera, error máximo 4,58 u (u = 2^-24 de la escala de cada cuenta), el mismo que da la simulación de redondeo hacia cero en la PC: RPCS3 emula el redondeo de la SPU y la diferencia con el PPU es de unos pocos redondeos; `RESULT: OK` |
+| 2026-10-18 | `iso` (repetida) | RPCS3 v0.0.42, archivo en `E:` | 1 459 978 240 bytes en `/dev_hdd0/gcps3/patron.bin`: secuencial de 1 MB y 1000 lecturas de 32 KB al azar, todos los bytes coinciden; USB omitido (sin archivo); `RESULT: OK`. Velocidades (65 MB/s secuencial, 9,8 ms por lectura al azar) son las del disco de la PC |
 
 Se llenan conforme se ejecutan las pruebas. Los tiempos medidos en RPCS3 dependen de la PC y no cuentan como rendimiento; las cifras de la consola van en [perf-log.md](perf-log.md).
