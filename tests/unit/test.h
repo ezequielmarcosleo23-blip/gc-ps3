@@ -61,5 +61,7 @@ extern const test_case_t mem_tests[];
 extern const test_case_t mmio_tests[];
 extern const test_case_t cpu_int_tests[];
 extern const test_case_t cpu_tests[];
+extern const test_case_t cpu_fpu_tests[];
+extern const test_case_t cpu_ps_tests[];
 
 #endif

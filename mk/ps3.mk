@@ -15,7 +15,9 @@ PPU_MACHDEP := -mcpu=cell -mhard-float -fmodulo-sched -ffunction-sections -fdata
 PPU_INC     := -I$(PSL1GHT)/ppu/include -I$(PSL1GHT)/ppu/include/simdmath \
                -Isrc -Iinclude -Itests/phase0 -Ilib/ps3mapi-lib/include \
                -Ilib/spukit/include -Ilib/rsxkit/include -I$(BUILD)/ps3/gen
-PPU_CFLAGS  := -O2 -g -Wall -Wextra -std=gnu11 $(PPU_MACHDEP) $(PPU_INC)
+# -ffp-contract=off -frounding-math: la FPU del Gekko se emula con la del PPU
+# (ver src/cpu/fpu_util.h); gnu11 fusionaría a*b+c en fmadd por su cuenta.
+PPU_CFLAGS  := -O2 -g -Wall -Wextra -std=gnu11 -ffp-contract=off -frounding-math $(PPU_MACHDEP) $(PPU_INC)
 # Código de terceros en lib/: sin -Wextra y con aliasing relajado (como su Makefile original)
 LIB_CFLAGS  := -O2 -g -Wall -std=gnu11 $(PPU_MACHDEP) $(PPU_INC) -DBIGENDIAN -fno-strict-aliasing
 PPU_LDFLAGS := $(PPU_MACHDEP) -L$(PSL1GHT)/ppu/lib

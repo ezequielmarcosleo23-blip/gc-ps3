@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include "core/log.h"
+#include "cpu/fpu_util.h"
 #include "cpu/interp.h"
 
 gekko_op_fn gekko_op_primary[64];
@@ -39,14 +40,38 @@ void gekko_op_illegal(gekko_t *c, uint32_t inst)
     gekko_exception(c, EXC_PROGRAM, c->pc, SRR1_PROGRAM_ILLEGAL);
 }
 
-static void op_4(gekko_t *c, uint32_t inst)  { gekko_op_4[XO10(inst)](c, inst); }
+#define XO_DCBZ_L 1014
+
+/* Opcode 4: paired singles (y dcbz_l). Sin HID2[PSE] son ilegales; sin
+ * MSR[FP], FPU no disponible (en ese orden, como Dolphin). */
+static void op_4(gekko_t *c, uint32_t inst)
+{
+    const uint32_t xo = XO10(inst);
+    if (xo != XO_DCBZ_L) {
+        if (!(c->spr[SPR_HID2] & HID2_PSE)) {
+            gekko_exception(c, EXC_PROGRAM, c->pc, SRR1_PROGRAM_ILLEGAL);
+            return;
+        }
+        if (gekko_fp_unavailable(c))
+            return;
+    }
+    gekko_op_4[xo](c, inst);
+}
+
 static void op_19(gekko_t *c, uint32_t inst) { gekko_op_19[XO10(inst)](c, inst); }
 static void op_31(gekko_t *c, uint32_t inst) { gekko_op_31[XO10(inst)](c, inst); }
-static void op_59(gekko_t *c, uint32_t inst) { gekko_op_59[XO5(inst)](c, inst); }
+
+static void op_59(gekko_t *c, uint32_t inst)
+{
+    if (!gekko_fp_unavailable(c))
+        gekko_op_59[XO5(inst)](c, inst);
+}
 
 /* En el opcode 63, las formas A (fadd, fmadd...) tienen XO5 >= 16; las X, menor. */
 static void op_63(gekko_t *c, uint32_t inst)
 {
+    if (gekko_fp_unavailable(c))
+        return;
     if (XO5(inst) & 0x10)
         gekko_op_63a[XO5(inst)](c, inst);
     else
@@ -73,6 +98,8 @@ static void tables_init(void)
     gekko_register_branch();
     gekko_register_mem();
     gekko_register_sys();
+    gekko_register_fpu();
+    gekko_register_ps();
     done = 1;
 }
 
@@ -84,6 +111,7 @@ void gekko_reset(gekko_t *c, gc_mem_t *mem)
     c->msr = MSR_IP;
     c->pc = 0xFFF00100u;
     c->spr[SPR_PVR] = GEKKO_PVR;
+    gekko_fpu_sync(c);
 }
 
 /* ---- excepciones ---------------------------------------------------------- */
@@ -206,7 +234,9 @@ void gekko_step(gekko_t *c)
 uint64_t gekko_run(gekko_t *c, uint64_t cycles)
 {
     const uint64_t start = c->cycles;
+    gekko_fpu_sync(c);                      /* el redondeo del Gekko, mientras corre */
     while (c->cycles - start < cycles)
         gekko_step(c);
+    fpu_host_round(0);                      /* el resto del emulador, al más cercano */
     return c->cycles - start;
 }

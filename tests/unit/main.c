@@ -31,6 +31,8 @@ static const test_case_t *const suites[] = {
     mmio_tests,
     cpu_int_tests,
     cpu_tests,
+    cpu_fpu_tests,
+    cpu_ps_tests,
 };
 
 int main(void)

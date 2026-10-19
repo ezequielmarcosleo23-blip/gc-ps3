@@ -75,6 +75,53 @@ enum {
     EXC_SYSCALL = 0x0C00, EXC_TRACE = 0x0D00, EXC_PERF_MONITOR = 0x0F00,
 };
 
+/* FPSCR */
+#define FPSCR_FX      0x80000000u
+#define FPSCR_FEX     0x40000000u
+#define FPSCR_VX      0x20000000u
+#define FPSCR_OX      0x10000000u
+#define FPSCR_UX      0x08000000u
+#define FPSCR_ZX      0x04000000u
+#define FPSCR_XX      0x02000000u
+#define FPSCR_VXSNAN  0x01000000u
+#define FPSCR_VXISI   0x00800000u
+#define FPSCR_VXIDI   0x00400000u
+#define FPSCR_VXZDZ   0x00200000u
+#define FPSCR_VXIMZ   0x00100000u
+#define FPSCR_VXVC    0x00080000u
+#define FPSCR_FR      0x00040000u
+#define FPSCR_FI      0x00020000u
+#define FPSCR_FPRF    0x0001F000u      /* clase del resultado (C y FPCC) */
+#define FPSCR_FPCC    0x0000F000u      /* FL, FG, FE, FU */
+#define FPSCR_VXSOFT  0x00000400u
+#define FPSCR_VXSQRT  0x00000200u
+#define FPSCR_VXCVI   0x00000100u
+#define FPSCR_VE      0x00000080u
+#define FPSCR_OE      0x00000040u
+#define FPSCR_UE      0x00000020u
+#define FPSCR_ZE      0x00000010u
+#define FPSCR_XE      0x00000008u
+#define FPSCR_NI      0x00000004u
+#define FPSCR_RN      0x00000003u      /* 0 más cercano, 1 a cero, 2 a +inf, 3 a -inf */
+#define FPSCR_MASK    0xFFFFF7FFu      /* el bit 20 está reservado */
+#define FPSCR_VX_ANY  (FPSCR_VXSNAN | FPSCR_VXISI | FPSCR_VXIDI | FPSCR_VXZDZ | FPSCR_VXIMZ | \
+                       FPSCR_VXVC | FPSCR_VXSOFT | FPSCR_VXSQRT | FPSCR_VXCVI)
+#define FPSCR_ANY_X   (FPSCR_OX | FPSCR_UX | FPSCR_ZX | FPSCR_XX | FPSCR_VX_ANY)
+#define FPSCR_ANY_E   (FPSCR_VE | FPSCR_OE | FPSCR_UE | FPSCR_ZE | FPSCR_XE)
+
+/* HID2: habilitan los paired singles, psq_l/psq_st y la caché bloqueada */
+#define HID2_LSQE  0x80000000u
+#define HID2_WPE   0x40000000u
+#define HID2_PSE   0x20000000u
+#define HID2_LCE   0x10000000u
+
+/* GQR0-7: tipo y escala de psq_l (LD) y psq_st (ST) */
+#define GQR_ST_TYPE(g)   ((g) & 7u)
+#define GQR_ST_SCALE(g)  (((g) >> 8) & 63u)
+#define GQR_LD_TYPE(g)   (((g) >> 16) & 7u)
+#define GQR_LD_SCALE(g)  (((g) >> 24) & 63u)
+enum { GQR_FLOAT = 0, GQR_U8 = 4, GQR_U16 = 5, GQR_S8 = 6, GQR_S16 = 7 };
+
 /* Motivo de una excepción de programa, en SRR1 */
 #define SRR1_PROGRAM_FP       0x00100000u
 #define SRR1_PROGRAM_ILLEGAL  0x00080000u
@@ -83,7 +130,7 @@ enum {
 
 typedef struct gekko {
     uint32_t  gpr[32];
-    double    fpr[32][2];      /* ps0, ps1 (la FPU llega en la entrega B2) */
+    uint64_t  fpr[32][2];      /* ps0 y ps1, como bits de un double */
     uint32_t  cr;
     uint32_t  xer;
     uint32_t  lr, ctr;
@@ -122,6 +169,11 @@ void gekko_set_external(gekko_t *c, int level);
 /* Excepción a pedido: guarda SRR0/SRR1 y salta al vector. srr0 = dirección
  * a la que volverá rfi; srr1_bits = motivo (excepción de programa). */
 void gekko_exception(gekko_t *c, uint32_t vector, uint32_t srr0, uint32_t srr1_bits);
+
+/* Pasa el modo de redondeo de FPSCR[RN] a la FPU de la máquina. Lo hacen
+ * gekko_reset, gekko_run y las instrucciones que escriben FPSCR; quien cambie
+ * c->fpscr por fuera (pruebas, estados guardados) lo llama después. */
+void gekko_fpu_sync(const gekko_t *c);
 
 /* mfspr / mtspr con sus efectos (DEC, timebase, DMA de la caché bloqueada). */
 uint32_t gekko_get_spr(gekko_t *c, uint32_t spr);

@@ -72,6 +72,17 @@ void gekko_register_int(void);
 void gekko_register_branch(void);
 void gekko_register_mem(void);
 void gekko_register_sys(void);
+void gekko_register_fpu(void);
+void gekko_register_ps(void);
+
+/* MSR[FP] = 0: excepción de FPU no disponible (SRR0 = esta instrucción). */
+static inline int gekko_fp_unavailable(gekko_t *c)
+{
+    if (c->msr & MSR_FP)
+        return 0;
+    gekko_exception(c, EXC_FP_UNAVAILABLE, c->pc, 0);
+    return 1;
+}
 
 /* Registra una forma XO con y sin OE (xo y xo | 0x200). */
 static inline void reg31_oe(uint32_t xo, gekko_op_fn fn)
