@@ -20,6 +20,6 @@
 #define GCPS3_CORE_VERSION_H
 
 #define GCPS3_NAME    "gc-ps3"
-#define GCPS3_VERSION "0.0.1-fase0"
+#define GCPS3_VERSION "0.0.2-fase1"
 
 #endif

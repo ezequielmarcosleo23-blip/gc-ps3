@@ -60,8 +60,10 @@ enum {
     SPR_XER = 1, SPR_LR = 8, SPR_CTR = 9, SPR_DSISR = 18, SPR_DAR = 19, SPR_DEC = 22,
     SPR_SDR1 = 25, SPR_SRR0 = 26, SPR_SRR1 = 27, SPR_TBL_R = 268, SPR_TBU_R = 269,
     SPR_SPRG0 = 272, SPR_EAR = 282, SPR_TBL_W = 284, SPR_TBU_W = 285, SPR_PVR = 287,
-    SPR_IBAT0U = 528, SPR_DBAT3L = 543, SPR_GQR0 = 912, SPR_HID2 = 920, SPR_WPAR = 921,
-    SPR_DMAU = 922, SPR_DMAL = 923, SPR_HID0 = 1008, SPR_HID1 = 1009, SPR_L2CR = 1017,
+    SPR_IBAT0U = 528, SPR_IBAT0L = 529, SPR_DBAT0U = 536, SPR_DBAT0L = 537, SPR_DBAT1U = 538,
+    SPR_DBAT1L = 539, SPR_DBAT3L = 543, SPR_GQR0 = 912, SPR_HID2 = 920, SPR_WPAR = 921,
+    SPR_DMAU = 922, SPR_DMAL = 923, SPR_ECID_U = 924, SPR_ECID_M = 925, SPR_ECID_L = 926,
+    SPR_HID0 = 1008, SPR_HID1 = 1009, SPR_L2CR = 1017,
 };
 
 #define GEKKO_PVR          0x00083214u
@@ -151,16 +153,23 @@ typedef struct gekko {
     int       reserve;
 
     uint32_t  illegal;         /* instrucciones no implementadas vistas */
+    int       stop;            /* gekko_run vuelve antes (lo pone el HLE o quien corre) */
     gc_mem_t *mem;
+
+    /* Traza opcional: se llama con cada instrucción antes de ejecutarla. */
+    void    (*trace)(void *ctx, uint32_t pc, uint32_t inst);
+    void     *trace_ctx;
 } gekko_t;
 
-/* Estado de un Gekko recién encendido, sin el IPL: PC = 0xFFF00100, MSR = IP. */
+/* Estado de un Gekko recién encendido, sin el IPL: PC = 0xFFF00100, MSR = IP,
+ * HID1 = 0x80000000 (CPU a 3 veces el bus) y el ECID de Dolphin. */
 void gekko_reset(gekko_t *c, gc_mem_t *mem);
 
 /* Ejecuta una instrucción (y una excepción pendiente, si hay). */
 void gekko_step(gekko_t *c);
 
-/* Ejecuta hasta `cycles` instrucciones. Devuelve las que ejecutó. */
+/* Ejecuta hasta `cycles` instrucciones, o menos si se prende c->stop.
+ * Devuelve las que ejecutó. */
 uint64_t gekko_run(gekko_t *c, uint64_t cycles);
 
 /* Línea de interrupción externa (la maneja el PI en la etapa D). */

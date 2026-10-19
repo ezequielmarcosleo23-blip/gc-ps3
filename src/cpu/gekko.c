@@ -111,6 +111,10 @@ void gekko_reset(gekko_t *c, gc_mem_t *mem)
     c->msr = MSR_IP;
     c->pc = 0xFFF00100u;
     c->spr[SPR_PVR] = GEKKO_PVR;
+    c->spr[SPR_HID1] = 0x80000000u;
+    c->spr[SPR_ECID_U] = 0x0D96E200u;       /* identificador del chip: el de Dolphin */
+    c->spr[SPR_ECID_M] = 0x1840C00Du;
+    c->spr[SPR_ECID_L] = 0x82BB08E8u;
     gekko_fpu_sync(c);
 }
 
@@ -225,6 +229,8 @@ void gekko_step(gekko_t *c)
         }
     }
     const uint32_t inst = gc_read32(c->mem, c->pc & ~3u);
+    if (c->trace)
+        c->trace(c->trace_ctx, c->pc, inst);
     c->npc = c->pc + 4;
     gekko_op_primary[OPCD(inst)](c, inst);
     c->pc = c->npc;
@@ -235,7 +241,7 @@ uint64_t gekko_run(gekko_t *c, uint64_t cycles)
 {
     const uint64_t start = c->cycles;
     gekko_fpu_sync(c);                      /* el redondeo del Gekko, mientras corre */
-    while (c->cycles - start < cycles)
+    while (c->cycles - start < cycles && !c->stop)
         gekko_step(c);
     fpu_host_round(0);                      /* el resto del emulador, al más cercano */
     return c->cycles - start;

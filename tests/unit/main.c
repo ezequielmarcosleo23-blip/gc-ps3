@@ -33,11 +33,18 @@ static const test_case_t *const suites[] = {
     cpu_tests,
     cpu_fpu_tests,
     cpu_ps_tests,
+    dol_tests,
+    sched_tests,
+    system_tests,
 };
 
 int main(void)
 {
     int total = 0;
+
+    /* Sin búfer: si ASan corta el proceso (p. ej. por memoria que una prueba
+     * fallida no liberó), lo ya impreso no se pierde en un pipe. */
+    setvbuf(stdout, NULL, _IONBF, 0);
 
     for (size_t s = 0; s < sizeof suites / sizeof suites[0]; s++) {
         for (const test_case_t *t = suites[s]; t->name; t++) {
