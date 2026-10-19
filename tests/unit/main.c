@@ -29,6 +29,8 @@ static const test_case_t *const suites[] = {
     pattern_tests,
     mem_tests,
     mmio_tests,
+    cpu_int_tests,
+    cpu_tests,
 };
 
 int main(void)

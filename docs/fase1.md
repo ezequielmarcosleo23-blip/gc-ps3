@@ -7,7 +7,7 @@
 | Etapa | Contenido | Se prueba con | Estado |
 | --- | --- | --- | --- |
 | A. Memoria y bus | 24 MB de RAM principal y 16 MB de ARAM con direccionamiento enmascarado (D-008); mapa de direcciones (0x80000000 con caché, 0xC0000000 sin caché); despacho de los registros de hardware ([mapa-memoria.md](mapa-memoria.md)) | Pruebas unitarias en PC, también en big-endian | Completa (2026-10-19): 12 pruebas nuevas, OK en x86-64 y en PowerPC 64 con QEMU |
-| B. Intérprete de Gekko | Enteros, saltos, lectura y escritura de memoria, CR y XER, registros especiales; timebase, decrementador y excepciones; FPU escalar y paired singles en el PPE (D-007) | Tablas de casos por instrucción y trazas de Dolphin | Pendiente |
+| B. Intérprete de Gekko | Enteros, saltos, lectura y escritura de memoria, CR y XER, registros especiales; timebase, decrementador y excepciones; FPU escalar y paired singles en el PPE (D-007) | Oráculo (750CXe en QEMU), programas a mano y trazas de Dolphin | B1 completa (2026-10-19): enteros y sistema, 11 578 casos del oráculo y 15 programas OK; B2 (FPU y paired singles) pendiente |
 | C. Arranque HLE | Cargador de DOL; estado inicial que deja el IPL (registros y variables de memoria baja); `OSReport` al log UDP; planificador de eventos por ciclos | Runner en PC | Pendiente |
 | D. Hardware mínimo | VI (búfer de imagen e interrupción de retrazo), PI (interrupciones), SI y EXI básicos; audio, disco y GX como stubs | DOLs de prueba | Pendiente |
 | E. Imagen en PS3 | El mismo núcleo en la app; XFB (YUV422) a RGB en el PPU y en pantalla con rsxkit; en PC se guarda como imagen | RPCS3 y captura | Pendiente |

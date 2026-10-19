@@ -59,5 +59,7 @@ extern const test_case_t logline_tests[];
 extern const test_case_t pattern_tests[];
 extern const test_case_t mem_tests[];
 extern const test_case_t mmio_tests[];
+extern const test_case_t cpu_int_tests[];
+extern const test_case_t cpu_tests[];
 
 #endif

@@ -23,7 +23,7 @@ PPU_LIBS    := -lnet -lsysmodule -lsysutil -lrt -llv2 -lm
 
 # Código compartido por todas las apps: núcleo + plataforma PS3 (sin el main de la app)
 PS3_SHARED_SRCS := $(filter-out src/platform/ps3/main.c,$(wildcard src/platform/ps3/*.c)) \
-                   $(wildcard src/core/*.c)
+                   $(wildcard src/core/*.c src/cpu/*.c)
 LIB_SRCS        := $(wildcard lib/ps3mapi-lib/source/*.c)
 PS3_SHARED_OBJS := $(PS3_SHARED_SRCS:%.c=$(BUILD)/ps3/obj/%.o)
 LIB_OBJS        := $(LIB_SRCS:%.c=$(BUILD)/ps3/obj/%.o)

@@ -6,7 +6,7 @@ HOST_CC     ?= cc
 HOST_CFLAGS := -std=c11 -g -O1 -Wall -Wextra -Wpedantic -Werror -Isrc -Iinclude
 HOST_SAN    := -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all
 
-HOST_CORE_SRCS   := $(wildcard src/core/*.c)
+HOST_CORE_SRCS   := $(wildcard src/core/*.c src/cpu/*.c)
 HOST_RUNNER_SRCS := $(wildcard src/platform/host/*.c) $(HOST_CORE_SRCS)
 HOST_TEST_SRCS   := $(wildcard tests/unit/*.c) $(HOST_CORE_SRCS)
 
@@ -38,3 +38,14 @@ HOST_BE_TESTS := $(BUILD)/host-be/unit-tests
 $(HOST_BE_TESTS): $(HOST_TEST_SRCS) $(wildcard src/core/*.h tests/unit/*.h)
 	@mkdir -p $(dir $@)
 	$(BE_CC) $(BE_CFLAGS) $(HOST_TEST_SRCS) -static -o $@
+
+# Oráculo: instrucciones ejecutadas en un PowerPC 750CXe emulado (base de Gekko).
+# Regenera tests/unit/data/oracle_*.bin; necesita gcc-powerpc-linux-gnu y qemu-user.
+ORACLE_CC   ?= powerpc-linux-gnu-gcc
+ORACLE_QEMU ?= qemu-ppc -cpu 750cxe
+ORACLE_SRCS := $(wildcard tools/ppc-oracle/oracle_*.c)
+ORACLE_BINS := $(ORACLE_SRCS:tools/ppc-oracle/%.c=$(BUILD)/oracle/%)
+
+$(BUILD)/oracle/%: tools/ppc-oracle/%.c
+	@mkdir -p $(dir $@)
+	$(ORACLE_CC) -static -O1 -mcpu=750 -Wall -Wextra -o $@ $<

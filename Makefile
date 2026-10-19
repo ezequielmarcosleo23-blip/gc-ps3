@@ -5,6 +5,7 @@
 #   make            compila la app de PS3 (.self) y el runner de PC
 #   make test       compila y ejecuta las pruebas unitarias en PC (ASan + UBSan)
 #   make test-be    las mismas pruebas en big-endian (PowerPC 64 con QEMU)
+#   make oracle     regenera las tablas del oráculo de Gekko (PowerPC 750CXe en QEMU)
 #   make phase0     compila las pruebas de la Fase 0 (build/phase0/<prueba>.self)
 #   make logrecv    escucha el log UDP de la consola o de RPCS3 (Ctrl+C para salir)
 #   make pkg        genera el .pkg instalable
@@ -25,7 +26,7 @@ include mk/spu.mk
 include mk/ps3.mk
 include mk/host.mk
 
-.PHONY: all ps3 phase0 pkg host test test-be run run-test logrecv clean toolchain-check docker-image docker-make help
+.PHONY: all ps3 phase0 pkg host test test-be oracle run run-test logrecv clean toolchain-check docker-image docker-make help
 
 all: ps3 phase0 host
 
@@ -47,6 +48,11 @@ test: $(HOST_TESTS) $(HOST_RUNNER)
 # Pruebas unitarias en big-endian con QEMU (necesita gcc-powerpc64-linux-gnu y qemu-user)
 test-be: $(HOST_BE_TESTS)
 	$(BE_QEMU) $(HOST_BE_TESTS)
+
+# Regenera las tablas del oráculo (tools/ppc-oracle) en tests/unit/data/
+oracle: $(ORACLE_BINS)
+	@mkdir -p tests/unit/data
+	for b in $(ORACLE_BINS); do $(ORACLE_QEMU) $$b tests/unit/data/$$(basename $$b).bin || exit 1; done
 
 run: $(PS3_SELF)
 	@if [ -z "$(PS3LOAD)" ]; then echo "Falta PS3LOAD, por ejemplo: make run PS3LOAD=tcp:192.168.1.50"; exit 1; fi
@@ -92,4 +98,4 @@ docker-make: docker-image
 		make -j$$(nproc) BUILD=build-docker all test test-be pkg
 
 help:
-	@sed -n '3,14p' Makefile | sed 's/^# \{0,1\}//'
+	@sed -n '3,15p' Makefile | sed 's/^# \{0,1\}//'
