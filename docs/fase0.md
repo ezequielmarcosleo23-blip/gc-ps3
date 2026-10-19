@@ -9,7 +9,7 @@
 | A. Repo y build | Esqueleto GPLv2+, Makefile PPU/SPU/PC, ps3mapi-lib fijada, imagen Docker, GitHub Actions | Completa (2026-10-18): CI verde, prueba de humo OK en RPCS3 |
 | B. Base de pruebas | Detección de entorno, log por UDP con `RESULT: OK/FAIL`, receptores en la PC, `make run-test` | Validada en RPCS3 (2026-10-18); falta la parte de consola: ps3load, buzzer, HEN |
 | C. Las 5 pruebas | `udplog`, `jit`, `spu`, `rsx`, `iso` | Validada en RPCS3 (2026-10-18): `udplog`, `spu`, `rsx` e `iso` OK; `jit` y las cifras de rendimiento esperan a la consola |
-| D. Cierre | Resultados, `perf-log.md`, decisiones y plan de la Fase 1 | Pendiente |
+| D. Cierre | Resultados, `perf-log.md`, decisiones y plan de la Fase 1 | En curso (2026-10-19): resultados, decisiones y lista para la consola listos; falta D-020 (Cg) y el plan de la Fase 1 |
 
 ## Pruebas en consola
 
@@ -31,6 +31,18 @@ La consola HEN quedó fuera de servicio el 2026-10-18. Mientras tanto RPCS3 hace
 | `make run-test` con ps3load, buzzer, detección de HEN | — | Sí |
 | `udplog`, `spu`, `rsx`, `iso` | Solo que funcionen | Rendimiento |
 | `jit` | — | Sí |
+
+### Puerta de la Fase 0 en consola
+
+Lo que falta para dar la Fase 0 por cerrada en hardware real. Las cifras van a [perf-log.md](perf-log.md).
+
+- [ ] `jit` en HEN: la cola NOBITS se lee, se ejecuta y se modifica sin colgar la consola
+- [ ] `jit` en CFW: el mismo método y después syscall 905 y `page_allocate` de PS3MAPI
+- [ ] `make run-test` con ps3loadx y el receptor en WSL (modo *mirrored* o `logrecv.cmd`)
+- [ ] Buzzer (1 pitido OK, 3 FAIL) y detección de HEN, Cobra y Mamba
+- [ ] `iso` desde USB (`/dev_usb000/gcps3/patron.bin`)
+- [ ] Rendimiento de `udplog`, `spu`, `rsx`, `iso` y `jit` en `perf-log.md`
+- [ ] Confirmar con esas cifras la adopción de spukit y rsxkit (D-024)
 
 ## Cómo correr cada prueba en RPCS3
 
