@@ -9,7 +9,7 @@
 | A. Repo y build | Esqueleto GPLv2+, Makefile PPU/SPU/PC, ps3mapi-lib fijada, imagen Docker, GitHub Actions | Completa (2026-10-18): CI verde, prueba de humo OK en RPCS3 |
 | B. Base de pruebas | Detección de entorno, log por UDP con `RESULT: OK/FAIL`, receptores en la PC, `make run-test` | Validada en RPCS3 (2026-10-18); falta la parte de consola: ps3load, buzzer, HEN |
 | C. Las 5 pruebas | `udplog`, `jit`, `spu`, `rsx`, `iso` | Validada en RPCS3 (2026-10-18): `udplog`, `spu`, `rsx` e `iso` OK; `jit` y las cifras de rendimiento esperan a la consola |
-| D. Cierre | Resultados, `perf-log.md`, decisiones y plan de la Fase 1 | En curso (2026-10-19): resultados, decisiones y lista para la consola listos; falta D-020 (Cg) y el plan de la Fase 1 |
+| D. Cierre | Resultados, `perf-log.md`, decisiones y plan de la Fase 1 | Completa (2026-10-19): D-024 y D-025, plan de la Fase 1 aprobado ([fase1.md](fase1.md)); queda abierta la puerta en consola |
 
 ## Pruebas en consola
 

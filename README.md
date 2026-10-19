@@ -2,7 +2,7 @@
 
 Emulador de GameCube para PlayStation 3, escrito en C11 sobre [PSL1GHT](https://github.com/ps3dev/PSL1GHT) y el toolchain abierto de [ps3dev](https://github.com/ps3dev/ps3dev). Sin SDK ni herramientas de Sony.
 
-> **Estado: Fase 0.** Todavía no emula nada: esta fase prueba en consola real las piezas críticas (JIT, SPU, RSX, E/S y log por red). Ver [docs/fase0.md](docs/fase0.md).
+> **Estado: Fase 1.** La Fase 0 (JIT, SPU, RSX, E/S y log por red) está validada en RPCS3 y espera la consola para el JIT y el rendimiento ([docs/fase0.md](docs/fase0.md)). La Fase 1 construye memoria, intérprete de Gekko y arranque de un DOL ([docs/fase1.md](docs/fase1.md)).
 
 ## Compilar
 
