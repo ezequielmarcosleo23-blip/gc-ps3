@@ -57,5 +57,7 @@ extern const test_case_t endian_tests[];
 extern const test_case_t backend_tests[];
 extern const test_case_t logline_tests[];
 extern const test_case_t pattern_tests[];
+extern const test_case_t mem_tests[];
+extern const test_case_t mmio_tests[];
 
 #endif

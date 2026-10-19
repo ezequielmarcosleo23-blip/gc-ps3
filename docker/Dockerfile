@@ -4,12 +4,14 @@
 # Solo descarga el nightly precompilado de ps3dev fijado en tools/toolchain.env
 # (ps3dev-docker compila todo desde fuente y es demasiado lento para CI).
 # libcg (NVIDIA Cg Toolkit, Ubuntu multiverse): la carga cgcomp para los shaders de rsxkit.
+# gcc-powerpc64-linux-gnu + qemu-user: pruebas unitarias en big-endian (make test-be).
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl make gcc libc6-dev python3 \
         libelf1t64 zlib1g libgmp10 libssl3t64 libzstd1 libcg \
+        gcc-powerpc64-linux-gnu libc6-dev-ppc64-cross qemu-user \
     && rm -rf /var/lib/apt/lists/*
 
 COPY tools/toolchain.env tools/fetch-toolchain.sh /tmp/tools/

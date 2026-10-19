@@ -53,4 +53,7 @@ uint32_t udplog_send_errors(void);   /* sendto fallidos (un destino puede fallar
 uint64_t udplog_now_us(void);        /* µs desde udplog_init (timebase del PPU) */
 const char *udplog_targets(void);    /* destinos en texto, para el log */
 
+/* Destino del log del núcleo (core/log.h): gc_log_set_sink(udplog_core_sink). */
+void udplog_core_sink(char level, const char *msg);
+
 #endif

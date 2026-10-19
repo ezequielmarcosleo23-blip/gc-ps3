@@ -209,6 +209,13 @@ void udplog_shutdown(void)
     }
 }
 
+void udplog_core_sink(char level, const char *msg)
+{
+    if (level != 'I' && level != 'W' && level != 'E' && level != 'D')
+        level = 'I';
+    udplog_printf(level, "%s", msg);
+}
+
 uint32_t udplog_sent(void)
 {
     lock();

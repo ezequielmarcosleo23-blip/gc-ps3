@@ -19,6 +19,7 @@
 #include <stdio.h>
 
 #include "ps3mapi_ps3_lib.h"
+#include "core/log.h"
 #include "core/version.h"
 #include "common/harness.h"
 
@@ -58,6 +59,7 @@ int phase0_main(const char *name, phase0_test_fn fn)
     ps3_env_t env;
 
     udplog_init(name);
+    gc_log_set_sink(udplog_core_sink);
     LOGI("%s %s, prueba %s (compilada %s %s)", GCPS3_NAME, GCPS3_VERSION, name, __DATE__, __TIME__);
     LOGI("log UDP: %s", udplog_targets());
 

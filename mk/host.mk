@@ -27,3 +27,14 @@ $(HOST_TESTS): $(HOST_TEST_OBJS)
 	$(HOST_CC) $(HOST_SAN) $^ -o $@
 
 -include $(HOST_RUNNER_OBJS:.o=.d) $(HOST_TEST_OBJS:.o=.d)
+
+# Las mismas pruebas en big-endian (PowerPC de 64 bits, como el PPU) con QEMU:
+# en la PS3 core/endian.h no invierte bytes y ese camino también se prueba.
+BE_CC      ?= powerpc64-linux-gnu-gcc
+BE_QEMU    ?= qemu-ppc64
+BE_CFLAGS  := -std=c11 -O1 -Wall -Wextra -Wpedantic -Werror -Isrc -Iinclude -mcpu=cell
+HOST_BE_TESTS := $(BUILD)/host-be/unit-tests
+
+$(HOST_BE_TESTS): $(HOST_TEST_SRCS) $(wildcard src/core/*.h tests/unit/*.h)
+	@mkdir -p $(dir $@)
+	$(BE_CC) $(BE_CFLAGS) $(HOST_TEST_SRCS) -static -o $@

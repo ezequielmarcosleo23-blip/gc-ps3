@@ -28,7 +28,7 @@ jobs:
       - name: Compilar y probar
         run: |
           docker run --rm -v "$PWD":/src -w /src gc-ps3-build:ci \
-            make -j"$(nproc)" toolchain-check all test pkg
+            make -j"$(nproc)" toolchain-check all test test-be pkg
 
       - uses: actions/upload-artifact@v4
         with:
