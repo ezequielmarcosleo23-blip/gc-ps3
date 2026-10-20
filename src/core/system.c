@@ -48,6 +48,21 @@ static const uint32_t vectors[] = {
 #define BOOT_MAGIC        0x0D15EA5Eu
 #define CONSOLE_DEVKIT    0x10000006u      /* el último devkit, como Dolphin (D-032) */
 
+/* Valores de encendido de todo el hardware (el AI antes que el DSP: el DMA de
+ * audio toma su frecuencia). */
+static void reset_hardware(gc_system_t *s, int pal)
+{
+    gc_pi_reset(&s->pi);
+    gc_vi_reset(&s->vi, pal);
+    gc_si_reset(&s->si);
+    gc_exi_reset(&s->exi);
+    gc_mi_reset(&s->mi);
+    gc_ai_reset(&s->ai);
+    gc_dsp_reset(&s->dsp);
+    gc_di_reset(&s->di);
+    gc_gx_reset(&s->gx);
+}
+
 int gc_system_init(gc_system_t *s)
 {
     memset(s, 0, sizeof *s);
@@ -60,7 +75,14 @@ int gc_system_init(gc_system_t *s)
     gc_hle_reset(&s->hle);
     gc_pi_init(&s->pi, s);
     gc_vi_init(&s->vi, s);
-    gc_vi_reset(&s->vi, 0);
+    gc_si_init(&s->si, s);
+    gc_exi_init(&s->exi, s);
+    gc_mi_init(&s->mi, s);
+    gc_ai_init(&s->ai, s);
+    gc_dsp_init(&s->dsp, s);
+    gc_di_init(&s->di, s);
+    gc_gx_init(&s->gx, s);
+    reset_hardware(s, 0);
     return 0;
 }
 
@@ -80,8 +102,8 @@ void gc_system_hle_boot(gc_system_t *s, const gc_boot_config_t *cfg, uint32_t en
     c->hle_ctx = s;
     gc_sched_init(&s->sched);
     gc_hle_reset(&s->hle);
-    gc_pi_reset(&s->pi);
-    gc_vi_reset(&s->vi, cfg && cfg->pal);
+    s->rtc_boot = cfg ? cfg->rtc : 0;
+    reset_hardware(s, cfg && cfg->pal);
 
     c->msr = MSR_FP | MSR_IR | MSR_DR | MSR_RI;           /* 0x2032 */
     c->spr[SPR_HID0] = 0x0011C464u;                        /* cachés, BHT, BTIC... */

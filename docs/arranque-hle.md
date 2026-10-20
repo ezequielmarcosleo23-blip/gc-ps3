@@ -44,7 +44,17 @@ En los vectores de excepción `0x100`, `0x200`, `0x300`, `0x400`, `0x500`, `0x60
 
 ## Hardware
 
-El PI y la VI quedan con los valores de encendido de Dolphin ([src/hw](../src/hw/README.md)): en el PI, la causa VI prendida y la máscara en cero; la VI con los tiempos de `Preset` (NTSC a 54 MHz o PAL a 27 MHz según `--pal`) y la primera media línea agendada.
+Todo el hardware queda con los valores de encendido de Dolphin ([src/hw](../src/hw/README.md), D-036):
+
+| Bloque | Cómo queda |
+| --- | --- |
+| PI | Causa VI prendida (hasta la primera media línea), máscara en cero |
+| VI | Tiempos de `Preset`: NTSC a 54 MHz o PAL a 27 MHz según `--pal`; la primera media línea agendada |
+| SI | Mando estándar en el puerto 1, sin botones; puertos 2 a 4 vacíos; SIPOLL con X = 492 |
+| EXI | Chip del IPL: reloj = `--rtc` más el tiempo emulado, SRAM de Dolphin (inglés, estéreo); ranuras de tarjeta vacías |
+| DSP | Detenido con DSPInit en 1; su primer correo (0x8071FEED) espera a que arranque. ARAM de 16 MB en cero |
+| AI | Parado; AIS a 48 kHz y AID a 32 kHz |
+| DI | Sin disco: tapa abierta |
 
 ## Después del arranque
 
@@ -52,5 +62,4 @@ Si hay un `.map` (el runner busca el que está al lado del DOL), se enganchan la
 
 ## Pendiente para etapas siguientes
 
-- El reloj de tiempo real del chip IPL (EXI), SI y los stubs: etapa D2.
 - Variables que solo pone el apploader de un disco (ID del juego en `0x80000000`, FST, arena): cuando se arranquen ISOs, fuera de la Fase 1.

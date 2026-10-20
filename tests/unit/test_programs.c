@@ -193,6 +193,7 @@ static void test_timer(void)    { CHECK(run_program("timer", MAX_CYCLES, EXITS))
 /* Termina de imprimir a los ~26 M ciclos y ~73 M: un cuadro (16,2 M) de margen */
 static void test_pantalla(void) { CHECK(run_program("pantalla", 45000000u, STAYS)); }
 static void test_contador(void) { CHECK(run_program("contador", 90000000u, STAYS)); }
+static void test_hw(void)       { CHECK(run_program("hw", MAX_CYCLES, EXITS)); }
 
 const test_case_t program_tests[] = {
     { "dol hola: OSReport, printf con pila y va_list, puts (= salida en la PC)", test_hola },
@@ -200,5 +201,6 @@ const test_case_t program_tests[] = {
     { "dol timer: decrementador en 0x900 con MSR[EE], 10 interrupciones", test_timer },
     { "dol pantalla: hola mundo en el XFB, VI 480i, CRC del cuadro mostrado", test_pantalla },
     { "dol contador: interrupción de VI en 0x500, 59,94 campos por segundo", test_contador },
+    { "dol hw: PI, SI, reloj, SRAM y UART del IPL, ARAM, DSP, DI y AI", test_hw },
     { NULL, NULL },
 };

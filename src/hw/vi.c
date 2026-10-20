@@ -22,11 +22,13 @@
 #include "core/log.h"
 #include "core/system.h"
 #include "hw/pi.h"
+#include "hw/si.h"
 #include "hw/vi.h"
 
 #define VI_CLOCK_27 27000000u
 #define VI_CLOCK_54 54000000u
 #define MIN_HALF_LINE 64u           /* si HLW vale 0, el evento no puede repetirse en el mismo ciclo */
+#define SI_POLL_DELAY 15u           /* medias líneas que tarda un sondeo de mandos */
 
 static uint16_t r16(const gc_vi_t *vi, uint32_t off) { return vi->reg[(off & (VI_REGS_SIZE - 1)) >> 1]; }
 static void w16(gc_vi_t *vi, uint32_t off, uint16_t v) { vi->reg[(off & (VI_REGS_SIZE - 1)) >> 1] = v; }
@@ -125,6 +127,16 @@ static void half_line(gc_vi_t *vi, uint64_t when)
         end_field(vi, 0);
     else if (hl == vi->even_last)
         end_field(vi, 1);
+
+    /* Sondeo de los mandos (Update de Dolphin): el que toca ahora y, en el
+     * comienzo de cada campo, el primero del campo */
+    const int field_start = hl == 0 || hl == gc_vi_half_lines_odd(vi);
+    if (hl == vi->next_si_poll) {
+        gc_si_poll(&vi->sys->si);
+        vi->next_si_poll += 2 * gc_si_poll_lines(&vi->sys->si);
+    }
+    if (field_start)
+        vi->next_si_poll = hl + SI_POLL_DELAY;
 
     const uint32_t total = gc_vi_half_lines_odd(vi) + gc_vi_half_lines_even(vi);
     vi->half_line++;
@@ -269,6 +281,7 @@ void gc_vi_reset(gc_vi_t *vi, int pal)
     vi->half_line = 0;
     vi->line_start = vi->sys->cpu.cycles;
     vi->fields = 0;
+    vi->next_si_poll = SI_POLL_DELAY;
     memset(&vi->last, 0, sizeof vi->last);
     update_parameters(vi);
     /* Como Dolphin, sin tocar la causa VI del PI: sigue prendida (valor de

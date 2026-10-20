@@ -33,6 +33,8 @@
  *
  * Cada campo que termina se informa con gc_vi_field_t (dirección del XFB,
  * ancho, separación entre líneas y alto): lo usa la etapa E para mostrarlo.
+ * La VI también marca cuándo el SI sondea los mandos: 15 medias líneas
+ * después de cada comienzo de campo y luego cada X líneas (SIPOLL).
  */
 #ifndef GCPS3_HW_VI_H
 #define GCPS3_HW_VI_H
@@ -71,6 +73,7 @@ typedef struct gc_vi {
     uint32_t       half_line;        /* media línea actual del cuadro (0 = inicio del campo impar) */
     uint64_t       line_start;       /* ciclo en que empezó la línea actual */
     uint32_t       odd_first, odd_last, even_first, even_last;   /* medias líneas activas */
+    uint32_t       next_si_poll;     /* media línea del próximo sondeo de mandos */
     uint64_t       fields;           /* campos terminados */
     gc_vi_field_t  last;             /* el último campo con XFB */
     gc_vi_field_fn on_field;

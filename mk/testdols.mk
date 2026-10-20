@@ -15,7 +15,7 @@ DOL_CFLAGS := -std=c11 -mcpu=750 -mhard-float -O2 -ffreestanding -fno-builtin -f
               -fno-tree-loop-distribute-patterns -ffp-contract=off -Wall -Wextra -Werror \
               -Wa,-m750cl -Itests/dol
 DOL_LDFLAGS := -nostdlib -static -T tests/dol/link.ld -Wl,--build-id=none
-TESTDOLS    := hola cpu timer pantalla contador
+TESTDOLS    := hola cpu timer pantalla contador hw
 TESTDOLS_HOSTED := hola cpu pantalla       # los que también compilan en la PC
 DOL_VIDEO   := pantalla contador           # los que usan tests/dol/video.c
 

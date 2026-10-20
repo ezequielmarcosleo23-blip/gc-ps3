@@ -36,7 +36,14 @@
 #include "core/mem.h"
 #include "core/sched.h"
 #include "cpu/gekko.h"
+#include "hw/ai.h"
+#include "hw/di.h"
+#include "hw/dsp.h"
+#include "hw/exi.h"
+#include "hw/gx.h"
+#include "hw/mi.h"
 #include "hw/pi.h"
+#include "hw/si.h"
 #include "hw/vi.h"
 
 #define GC_CPU_CLOCK   486000000u      /* Hz */
@@ -56,6 +63,14 @@ typedef struct gc_system {
     gc_hle_t   hle;
     gc_pi_t    pi;
     gc_vi_t    vi;
+    gc_si_t    si;
+    gc_exi_t   exi;
+    gc_mi_t    mi;
+    gc_ai_t    ai;
+    gc_dsp_t   dsp;
+    gc_di_t    di;
+    gc_gx_t    gx;
+    uint64_t   rtc_boot;               /* segundos desde 2000 al arrancar (reloj del IPL) */
 } gc_system_t;
 
 /* Reserva la memoria y deja la CPU recién encendida. 0, o -1 sin memoria. */

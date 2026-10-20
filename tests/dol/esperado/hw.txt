@@ -1,0 +1,16 @@
+hw: pi: revision de Flipper 0x246500b1
+hw: pi: Flipper de las consolas de venta: OK
+hw: si: puerto 1 tipo 0x090000
+hw: si: mando estandar en el puerto 1, puertos 2 a 4 vacios: OK
+hw: si: sondeo del puerto 1 0x00808080 0x80800000
+hw: si: sin botones y con las palancas al centro: OK
+hw: exi: el reloj del IPL coincide con la hora del sistema: OK
+hw: exi: SRAM suma 0x002c/0xffd0, idioma 0, banderas 0x2c
+hw: exi: suma de control de la SRAM: OK
+hw: hola por la UART del IPL
+hw: aram: 1024 bytes de ida y vuelta por DMA, con ARINT: OK
+hw: dsp: DSPCSR 0x0804, primer correo 0x8071feed
+hw: dsp: el ROM del DSP saluda al arrancar: OK
+hw: di: sin disco, la tapa abierta: OK
+hw: ai: el contador de muestras avanza a 48 kHz: OK
+hw: todo OK
