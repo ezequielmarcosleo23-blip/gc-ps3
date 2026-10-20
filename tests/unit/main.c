@@ -38,6 +38,7 @@ static const test_case_t *const suites[] = {
     system_tests,
     hw_tests,
     hw_io_tests,
+    xfb_tests,
     hle_tests,
     program_tests,
 };

@@ -76,6 +76,7 @@ typedef struct gc_vi {
     uint32_t       next_si_poll;     /* media línea del próximo sondeo de mandos */
     uint64_t       fields;           /* campos terminados */
     gc_vi_field_t  last;             /* el último campo con XFB */
+    gc_vi_field_t  field[2];         /* el último impar y el último par con XFB */
     gc_vi_field_fn on_field;
     void          *on_field_ctx;
 } gc_vi_t;
@@ -88,6 +89,9 @@ void gc_vi_reset(gc_vi_t *vi, int pal);
 
 /* Ciclos de CPU por media línea con los registros actuales. */
 uint32_t gc_vi_ticks_per_half_line(const gc_vi_t *vi);
+
+/* 1 si el campo impar va arriba (su PRB es el menor), como en Dolphin. */
+int gc_vi_odd_on_top(const gc_vi_t *vi);
 
 /* Medias líneas de cada campo. */
 uint32_t gc_vi_half_lines_odd(const gc_vi_t *vi);

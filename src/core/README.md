@@ -17,5 +17,8 @@ Núcleo portable: compila igual en la PC y en la PS3.
 | `hle_os.c` | Los ganchos que se reconocen por nombre: `OSReport`, `printf`, `vprintf`, `puts`, `__write_console`, `exit` |
 | `vaformat.h/.c` | printf con el formato en la RAM emulada y los argumentos según el ABI SVR4 del PowerPC |
 | `system.h/.c` | La máquina armada (memoria, CPU, planificador y el hardware de [src/hw](../hw/README.md)), arranque HLE de un DOL ([arranque-hle](../../docs/arranque-hle.md)) y el bucle que corre la CPU entre eventos |
+| `xfb.h/.c` | El cuadro que muestra la VI: los dos campos línea por medio y YUV 4:2:2 a RGB (BT.601, enteros) |
+| `png.h/.c` | PNG sin compresión ni librerías, para guardar cuadros |
+| `crc32.h/.c` | CRC-32 de zlib (PNG y comparación de cuadros) |
 
 Cada módulo tiene sus pruebas en `tests/unit/` (`make test` y `make test-be`).

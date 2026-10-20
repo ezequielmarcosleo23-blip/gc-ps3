@@ -338,6 +338,8 @@ static void test_vi_fields(void)
     CHECK(got[1].even == 1);
     CHECK_EQ_U64(sys.vi.fields, 2);
     CHECK(memcmp(&sys.vi.last, &got[1], sizeof got[1]) == 0);
+    CHECK(memcmp(&sys.vi.field[0], &got[0], sizeof got[0]) == 0);   /* el último de cada paridad */
+    CHECK(memcmp(&sys.vi.field[1], &got[1], sizeof got[1]) == 0);
 
     /* Sin POFF la dirección va tal cual; CLRPOFF apaga POFF */
     wvi32(VI_TFBL, 0x00200000u);

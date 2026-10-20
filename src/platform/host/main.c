@@ -2,7 +2,8 @@
 
 /*
  * Runner en PC: arranca un DOL por HLE y lo corre en el intérprete de Gekko,
- * sin consola ni pantalla (la imagen llega en la etapa E de la Fase 1).
+ * sin ventana: al final informa el último cuadro de la VI (tamaño y CRC-32 de
+ * sus bytes RGB) y, si se pide, lo guarda como PNG.
  *
  *   gc-ps3-runner [opciones] programa.dol
  *     --ciclos N       cuántos ciclos de CPU correr (por omisión 486 000 000 = 1 s)
@@ -12,6 +13,7 @@
  *     --pal            el IPL dejó modo PAL (por omisión NTSC)
  *     --rtc SEGUNDOS   reloj al arrancar, en segundos desde el 2000-01-01
  *                      (por omisión, la hora de la PC)
+ *     --imagen ARCHIVO el último cuadro de la VI en PNG (640x480 en 480i)
  *
  * Lo que el programa imprime (OSReport, printf...) sale por la salida estándar;
  * los mensajes del emulador, por la de error. Sale con el código de exit() del
@@ -23,9 +25,12 @@
 #include <string.h>
 #include <time.h>
 
+#include "core/crc32.h"
 #include "core/log.h"
+#include "core/png.h"
 #include "core/system.h"
 #include "core/version.h"
+#include "core/xfb.h"
 
 #define DEFAULT_CYCLES GC_CPU_CLOCK
 #define MAX_FILE       (32u << 20)
@@ -39,6 +44,7 @@ static void usage(FILE *out, const char *argv0)
             "  --traza ARCHIVO  pc e instruccion de cada paso\n"
             "  --pal            modo de video PAL (por omision NTSC)\n"
             "  --rtc SEGUNDOS   reloj al arrancar, segundos desde el 2000-01-01\n"
+            "  --imagen ARCHIVO el ultimo cuadro de la VI en PNG\n"
             "  --version, --help\n",
             argv0, (unsigned)DEFAULT_CYCLES);
 }
@@ -101,10 +107,45 @@ static int parse_u64(const char *s, uint64_t *out)
     return 0;
 }
 
+/* El último cuadro: tamaño y CRC por la salida de error; en PNG si hay archivo.
+ * -1 si se pidió el PNG y no se pudo escribir. */
+static int report_frame(const char *path)
+{
+    uint32_t w, h;
+    const size_t size = gc_xfb_frame_size(&sys.vi, &w, &h);
+    uint8_t *rgb = size ? malloc(size) : NULL;
+    if (!rgb || gc_xfb_frame(&sys.mem, &sys.vi, rgb, size) != 0) {
+        free(rgb);
+        if (path)
+            fprintf(stderr, "runner: sin cuadro de video, no se escribe %s\n", path);
+        return path ? -1 : 0;
+    }
+    fprintf(stderr, "runner: cuadro %ux%u, crc32 RGB 0x%08x\n", (unsigned)w, (unsigned)h,
+            (unsigned)gc_crc32(0, rgb, size));
+    int rc = 0;
+    if (path) {
+        const size_t cap = gc_png_size(w, h);
+        uint8_t *png = cap ? malloc(cap) : NULL;
+        const size_t n = png ? gc_png_encode(rgb, w, h, png, cap) : 0;
+        FILE *f = n ? fopen(path, "wb") : NULL;
+        if (!f || fwrite(png, 1, n, f) != n) {
+            fprintf(stderr, "runner: no se pudo escribir %s\n", path);
+            rc = -1;
+        } else {
+            fprintf(stderr, "runner: imagen en %s\n", path);
+        }
+        if (f && fclose(f) != 0)
+            rc = -1;
+        free(png);
+    }
+    free(rgb);
+    return rc;
+}
+
 int main(int argc, char **argv)
 {
     uint64_t cycles = DEFAULT_CYCLES;
-    const char *dol_path = NULL, *trace_path = NULL, *map_path = NULL;
+    const char *dol_path = NULL, *trace_path = NULL, *map_path = NULL, *image_path = NULL;
     gc_boot_config_t cfg = { 0, 0 };
     int have_rtc = 0;
 
@@ -133,6 +174,12 @@ int main(int argc, char **argv)
                 return 2;
             }
             trace_path = argv[i];
+        } else if (strcmp(a, "--imagen") == 0) {
+            if (++i >= argc) {
+                fprintf(stderr, "--imagen necesita un archivo\n");
+                return 2;
+            }
+            image_path = argv[i];
         } else if (strcmp(a, "--pal") == 0) {
             cfg.pal = 1;
         } else if (strcmp(a, "--rtc") == 0) {
@@ -231,11 +278,12 @@ int main(int argc, char **argv)
     else
         fprintf(stderr, "runner: %llu campos de video, ninguno con XFB\n",
                 (unsigned long long)sys.vi.fields);
+    const int image_failed = report_frame(image_path) != 0;
     const int code = sys.hle.exited ? (int)(sys.hle.exit_code & 0xFFu) : 0;
     if (sys.hle.exited)
         fprintf(stderr, "runner: el programa termino con exit(%d)\n", (int)sys.hle.exit_code);
     else
         fprintf(stderr, "runner: se acabaron los ciclos sin exit\n");
     gc_system_free(&sys);
-    return code;
+    return image_failed ? 1 : code;
 }

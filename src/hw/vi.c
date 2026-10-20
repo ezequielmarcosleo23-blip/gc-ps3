@@ -58,6 +58,11 @@ uint32_t gc_vi_half_lines_even(const gc_vi_t *vi)
     return 3 * equ(vi) + prb(vi, VI_VTE) + 2 * acv(vi) + psb(vi, VI_VTE);
 }
 
+int gc_vi_odd_on_top(const gc_vi_t *vi)
+{
+    return prb(vi, VI_VTO) <= prb(vi, VI_VTE);
+}
+
 uint32_t gc_vi_ticks_per_half_line(const gc_vi_t *vi)
 {
     const uint32_t clock = (r16(vi, VI_CLOCK) & 1u) ? VI_CLOCK_54 : VI_CLOCK_27;
@@ -112,6 +117,7 @@ static void end_field(gc_vi_t *vi, int even)
     vi->fields++;
     if (f.xfb) {
         vi->last = f;
+        vi->field[even] = f;
         if (vi->on_field)
             vi->on_field(vi->on_field_ctx, &f);
     }
@@ -283,6 +289,7 @@ void gc_vi_reset(gc_vi_t *vi, int pal)
     vi->fields = 0;
     vi->next_si_poll = SI_POLL_DELAY;
     memset(&vi->last, 0, sizeof vi->last);
+    memset(vi->field, 0, sizeof vi->field);
     update_parameters(vi);
     /* Como Dolphin, sin tocar la causa VI del PI: sigue prendida (valor de
      * encendido del PI) hasta la primera media línea. */

@@ -28,13 +28,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "core/crc32.h"
 #include "core/log.h"
 #include "core/system.h"
+#include "core/xfb.h"
 #include "test.h"
 
 #define MAX_CYCLES (200u * 1000u * 1000u)
 #define OUT_MAX    8192
 #define STAYS      0            /* el programa no termina: corre sus ciclos */
+#define PANTALLA_RGB_CRC 0x10589E8Cu   /* tests/dol/pantalla.c en RGB, 640x480 */
 #define EXITS      1
 
 static char out[OUT_MAX];
@@ -130,7 +133,20 @@ static int check_screen(const char *name)
         fprintf(stderr, "  %s: la VI mostro un cuadro con CRC 0x%08x (XFB 0x%08x/0x%08x, %ux%u)\n",
                 name, (unsigned)seen, (unsigned)field_odd.xfb, (unsigned)field_even.xfb,
                 (unsigned)field_odd.width, (unsigned)field_odd.height);
-    return seen == printed && field_odd.xfb == 0x00200000u && field_even.xfb == 0x00200500u;
+    if (seen != printed || field_odd.xfb != 0x00200000u || field_even.xfb != 0x00200500u)
+        return 0;
+
+    /* El cuadro en RGB: el mismo que dibuja la versión de PC del DOL (comparado
+     * píxel por píxel con su PPM al escribir esta prueba) */
+    static uint8_t rgb[640 * 480 * 3];
+    uint32_t w, h;
+    if (gc_xfb_frame_size(&sys.vi, &w, &h) != sizeof rgb ||
+        gc_xfb_frame(&sys.mem, &sys.vi, rgb, sizeof rgb) != 0)
+        return 0;
+    const uint32_t crc = gc_crc32(0, rgb, sizeof rgb);
+    if (crc != PANTALLA_RGB_CRC)
+        fprintf(stderr, "  %s: cuadro RGB con CRC 0x%08x\n", name, (unsigned)crc);
+    return crc == PANTALLA_RGB_CRC;
 }
 
 /* 1 si el DOL corrió, terminó como tenía que terminar e imprimió lo esperado. */

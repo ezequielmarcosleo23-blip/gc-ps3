@@ -25,7 +25,7 @@ Programas de GameCube propios para probar el emulador de punta a punta, sin soft
 ## Cómo se usan
 
 - `make test` (y `make test-be`) corre los DOLs dentro de las pruebas unitarias (`tests/unit/test_programs.c`) y cada uno tiene que imprimir exactamente su `esperado/*.txt`. `hola`, `cpu`, `timer` y `hw` terminan con `exit(0)`; `pantalla` y `contador` no terminan y se corren 45 y 90 millones de ciclos.
-- A mano: `build/host/gc-ps3-runner tests/dol/bin/cpu.dol` (toma solo el `.map` de al lado). Para los que no terminan, `--ciclos 100000000`.
+- A mano: `build/host/gc-ps3-runner tests/dol/bin/cpu.dol` (toma solo el `.map` de al lado). Para los que no terminan, `--ciclos 100000000`. Con `--imagen archivo.png` guarda el último cuadro; el de `pantalla` es igual píxel por píxel al de la versión de PC (`build/testdols/host/pantalla imagen.ppm`), CRC-32 de los bytes RGB `0x10589e8c`.
 - `make testdols` los vuelve a compilar con `powerpc-linux-gnu-gcc -mcpu=750 -Wa,-m750cl` y regenera `esperado/hola.txt`, `esperado/cpu.txt` y `esperado/pantalla.txt` compilando las mismas fuentes para la PC (`-DGCPS3_HOST`). El resultado es el mismo byte a byte en cada compilación.
 - Para mirar el dibujo de `pantalla` sin el emulador: `build/testdols/host/pantalla imagen.ppm`.
 

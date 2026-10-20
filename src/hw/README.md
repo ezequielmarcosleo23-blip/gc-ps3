@@ -16,7 +16,7 @@ El hardware de la GameCube alrededor de la CPU: cada bloque registra sus registr
 
 ## Cómo se arma
 
-`gc_system_init` registra los bloques una vez; `gc_system_hle_boot` los deja con los valores de encendido de Dolphin (PI con la causa VI prendida, VI con los tiempos de `Preset`, AI a 48/32 kHz, DSP detenido con DSPInit, DVD con la tapa abierta) y agenda la primera media línea y el DMA de audio. El campo que termina se informa con `gc_vi_field_t` (dirección, ancho, separación entre líneas y alto): el runner lo muestra al final y la etapa E lo va a pasar a RGB. El estado del mando está en `gc_si_t.pad`: la plataforma lo va a llenar cuando haya entrada.
+`gc_system_init` registra los bloques una vez; `gc_system_hle_boot` los deja con los valores de encendido de Dolphin (PI con la causa VI prendida, VI con los tiempos de `Preset`, AI a 48/32 kHz, DSP detenido con DSPInit, DVD con la tapa abierta) y agenda la primera media línea y el DMA de audio. El campo que termina se informa con `gc_vi_field_t` (dirección, ancho, separación entre líneas y alto) y la VI guarda el último de cada paridad: con esos dos `src/core/xfb.c` arma el cuadro RGB que guarda el runner (`--imagen`) y que va a mostrar la app de PS3. El estado del mando está en `gc_si_t.pad`: la plataforma lo va a llenar cuando haya entrada.
 
 ## Tiempos
 

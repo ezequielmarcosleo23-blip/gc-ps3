@@ -12,6 +12,7 @@ Requisitos: Linux (o Ubuntu en WSL) con el toolchain `nightly-2026-10-12` de ps3
 make                 # app de PS3 (build/ps3/gc-ps3.self) y runner de PC
 make test            # pruebas unitarias en PC con ASan + UBSan (incluye los DOLs de tests/dol)
 build/host/gc-ps3-runner tests/dol/bin/cpu.dol   # corre un DOL en el intérprete (--help)
+build/host/gc-ps3-runner --ciclos 45000000 --imagen pantalla.png tests/dol/bin/pantalla.dol   # y guarda la imagen
 make phase0          # pruebas de la Fase 0 para consola o RPCS3 (build/phase0/*.self)
 make logrecv         # recibe el log UDP de la consola (en Windows: tools\logrecv.cmd)
 make pkg             # paquete instalable (build/ps3/gc-ps3.pkg)
