@@ -57,3 +57,21 @@ oracle-cc-check:
 $(BUILD)/oracle/%: tools/ppc-oracle/%.c | oracle-cc-check
 	@mkdir -p $(dir $@)
 	$(ORACLE_CC) -static -O1 -mcpu=750 -Wall -Wextra -o $@ $<
+
+# La app de PS3 en la PC (tests/appsim): src/platform/ps3/main.c con versiones
+# de prueba del mando, lv2, rsxkit y el log, y el mismo núcleo que el runner.
+# tests/appsim/run.py la corre con un guion de botones y revisa el log.
+APPSIM_DIR    := $(BUILD)/host/appsim
+APPSIM        := $(APPSIM_DIR)/gc-ps3-appsim
+APPSIM_SRCS   := src/platform/ps3/main.c src/platform/ps3/files.c tests/appsim/stubs.c
+APPSIM_OBJS   := $(APPSIM_SRCS:%.c=$(APPSIM_DIR)/obj/%.o)
+APPSIM_CFLAGS := $(filter-out -std=c11,$(HOST_CFLAGS)) -std=gnu11 -Itests/appsim/include -Ilib/rsxkit/include
+
+$(APPSIM_DIR)/obj/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(HOST_CC) $(APPSIM_CFLAGS) $(HOST_SAN) -MMD -MP -c $< -o $@
+
+$(APPSIM): $(APPSIM_OBJS) $(HOST_CORE_SRCS:%.c=$(BUILD)/host/obj/%.o)
+	$(HOST_CC) $(HOST_SAN) $^ -lm -o $@
+
+-include $(APPSIM_OBJS:.o=.d)

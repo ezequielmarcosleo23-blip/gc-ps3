@@ -14,6 +14,9 @@
  *     --rtc SEGUNDOS   reloj al arrancar, en segundos desde el 2000-01-01
  *                      (por omisión, la hora de la PC)
  *     --imagen ARCHIVO el último cuadro de la VI en PNG (640x480 en 480i)
+ *     --cuadros        cada cuadro distinto que muestra la VI (al terminar un
+ *                      campo): número, campo, tamaño y CRC-32 de sus bytes RGB.
+ *                      Es la misma lista que da la app de PS3 (tools/compare_log.py)
  *
  * Lo que el programa imprime (OSReport, printf...) sale por la salida estándar;
  * los mensajes del emulador, por la de error. Sale con el código de exit() del
@@ -26,6 +29,7 @@
 #include <time.h>
 
 #include "core/crc32.h"
+#include "core/frames.h"
 #include "core/log.h"
 #include "core/png.h"
 #include "core/system.h"
@@ -45,6 +49,7 @@ static void usage(FILE *out, const char *argv0)
             "  --pal            modo de video PAL (por omision NTSC)\n"
             "  --rtc SEGUNDOS   reloj al arrancar, segundos desde el 2000-01-01\n"
             "  --imagen ARCHIVO el ultimo cuadro de la VI en PNG\n"
+            "  --cuadros        cada cuadro distinto de la VI con su CRC\n"
             "  --version, --help\n",
             argv0, (unsigned)DEFAULT_CYCLES);
 }
@@ -107,6 +112,17 @@ static int parse_u64(const char *s, uint64_t *out)
     return 0;
 }
 
+/* --cuadros: el mismo formato que la app de PS3 (con "app:" en vez de "runner:") */
+static gc_frames_t frames;
+static uint8_t frame_rgb[720 * 576 * 3];
+
+static void print_frame(void *ctx, const gc_frame_t *f)
+{
+    (void)ctx;
+    fprintf(stderr, "runner: cuadro %u (campo %llu) %ux%u, crc32 RGB 0x%08x\n", (unsigned)f->number,
+            (unsigned long long)f->field, (unsigned)f->width, (unsigned)f->height, (unsigned)f->crc);
+}
+
 /* El último cuadro: tamaño y CRC por la salida de error; en PNG si hay archivo.
  * -1 si se pidió el PNG y no se pudo escribir. */
 static int report_frame(const char *path)
@@ -147,7 +163,7 @@ int main(int argc, char **argv)
     uint64_t cycles = DEFAULT_CYCLES;
     const char *dol_path = NULL, *trace_path = NULL, *map_path = NULL, *image_path = NULL;
     gc_boot_config_t cfg = { 0, 0 };
-    int have_rtc = 0;
+    int have_rtc = 0, list_frames = 0;
 
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
@@ -180,6 +196,8 @@ int main(int argc, char **argv)
                 return 2;
             }
             image_path = argv[i];
+        } else if (strcmp(a, "--cuadros") == 0) {
+            list_frames = 1;
         } else if (strcmp(a, "--pal") == 0) {
             cfg.pal = 1;
         } else if (strcmp(a, "--rtc") == 0) {
@@ -249,6 +267,8 @@ int main(int argc, char **argv)
         free(map);
     }
     sys.hle.report = report_line;
+    if (list_frames)
+        gc_frames_attach(&frames, &sys, frame_rgb, sizeof frame_rgb, print_frame, NULL);
 
     if (trace_path) {
         trace_file = fopen(trace_path, "w");

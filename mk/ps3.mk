@@ -4,6 +4,8 @@
 # Replica los pasos de $(PSL1GHT)/ppu_rules sin el make recursivo de los samples.
 #
 #   build/ps3/gc-ps3.self          app principal (src/platform/ps3/main.c)
+#   build/ps3/dol/                 los DOLs de prueba, para bootear el .self en RPCS3
+#                                  (el pkg los lleva en USRDIR/dol)
 #   build/phase0/<prueba>.self     una por carpeta de tests/phase0/ (salvo common/)
 
 PPU_BIN     := $(PS3DEV)/ppu/bin
@@ -17,7 +19,8 @@ PPU_INC     := -I$(PSL1GHT)/ppu/include -I$(PSL1GHT)/ppu/include/simdmath \
                -Ilib/spukit/include -Ilib/rsxkit/include -I$(BUILD)/ps3/gen
 # -ffp-contract=off -frounding-math: la FPU del Gekko se emula con la del PPU
 # (ver src/cpu/fpu_util.h); gnu11 fusionaría a*b+c en fmadd por su cuenta.
-PPU_CFLAGS  := -O2 -g -Wall -Wextra -std=gnu11 -ffp-contract=off -frounding-math $(PPU_MACHDEP) $(PPU_INC)
+PPU_CFLAGS  := -O2 -g -Wall -Wextra -std=gnu11 -ffp-contract=off -frounding-math $(PPU_MACHDEP) $(PPU_INC) \
+               -DGCPS3_APPID='"$(APPID)"'
 # Código de terceros en lib/: sin -Wextra y con aliasing relajado (como su Makefile original)
 LIB_CFLAGS  := -O2 -g -Wall -std=gnu11 $(PPU_MACHDEP) $(PPU_INC) -DBIGENDIAN -fno-strict-aliasing
 PPU_LDFLAGS := $(PPU_MACHDEP) -L$(PSL1GHT)/ppu/lib
@@ -56,8 +59,17 @@ PS3_SELF     := $(BUILD)/ps3/$(APP).self
 PS3_PKG      := $(BUILD)/ps3/$(APP).pkg
 PS3_MAIN_OBJ := $(BUILD)/ps3/obj/src/platform/ps3/main.o
 
-$(PS3_ELF): $(PS3_MAIN_OBJ) $(PPU_COMMON)
-	$(PPU_CC) $^ $(PPU_LDFLAGS) $(PPU_LIBS) -Wl,-Map,$@.map -o $@
+PS3_APP_LIBS := $(RSXKIT_A) -lrsx -lgcm_sys -lio
+
+$(PS3_ELF): $(PS3_MAIN_OBJ) $(PPU_COMMON) $(RSXKIT_A)
+	$(PPU_CC) $(filter %.o,$^) $(PS3_APP_LIBS) $(PPU_LDFLAGS) $(PPU_LIBS) -Wl,-Map,$@.map -o $@
+
+# Los DOLs de prueba al lado del .self (la app busca "dol" junto al ejecutable)
+PS3_DOLS := $(wildcard tests/dol/bin/*.dol tests/dol/bin/*.map)
+$(BUILD)/ps3/dol/.listo: $(PS3_DOLS)
+	@mkdir -p $(dir $@)
+	cp $(PS3_DOLS) $(dir $@)
+	@touch $@
 
 # --- pruebas de la Fase 0 -----------------------------------------------------
 PHASE0_TESTS       := $(filter-out common,$(notdir $(patsubst %/,%,$(wildcard tests/phase0/*/))))
@@ -109,8 +121,9 @@ $(BUILD)/ps3/obj/%.o: %.c | $(SPU_HDRS)
 	$(PS3_TOOLS)/make_self $*.stripped.elf $@ > /dev/null
 	$(PS3_TOOLS)/fself $*.stripped.elf $*.fake.self > /dev/null
 
-$(PS3_PKG): $(PS3_SELF)
-	rm -rf $(BUILD)/ps3/pkg && mkdir -p $(BUILD)/ps3/pkg/USRDIR
+$(PS3_PKG): $(PS3_SELF) $(PS3_DOLS)
+	rm -rf $(BUILD)/ps3/pkg && mkdir -p $(BUILD)/ps3/pkg/USRDIR/dol
+	cp $(PS3_DOLS) $(BUILD)/ps3/pkg/USRDIR/dol/
 	cp $(PS3_TOOLS)/ICON0.PNG $(BUILD)/ps3/pkg/ICON0.PNG
 	$(PS3_TOOLS)/make_self_npdrm $(PS3_STRIPPED) $(BUILD)/ps3/pkg/USRDIR/EBOOT.BIN $(CONTENTID) > /dev/null
 	$(PS3_TOOLS)/sfo --title "$(TITLE)" --appid "$(APPID)" -f $(PS3_TOOLS)/sfo.xml $(BUILD)/ps3/pkg/PARAM.SFO

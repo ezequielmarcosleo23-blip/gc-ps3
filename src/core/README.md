@@ -20,5 +20,6 @@ Núcleo portable: compila igual en la PC y en la PS3.
 | `xfb.h/.c` | El cuadro que muestra la VI: los dos campos línea por medio y YUV 4:2:2 a RGB (BT.601, enteros) |
 | `png.h/.c` | PNG sin compresión ni librerías, para guardar cuadros |
 | `crc32.h/.c` | CRC-32 de zlib (PNG y comparación de cuadros) |
+| `frames.h/.c` | Al terminar cada campo de video arma el cuadro RGB y avisa si cambió (número, campo, tamaño y CRC); lo usan el runner (`--cuadros`) y la app de PS3 |
 
 Cada módulo tiene sus pruebas en `tests/unit/` (`make test` y `make test-be`).

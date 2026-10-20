@@ -5,6 +5,7 @@
 #   make            compila la app de PS3 (.self) y el runner de PC
 #   make test       compila y ejecuta las pruebas unitarias en PC (ASan + UBSan)
 #   make test-be    las mismas pruebas en big-endian (PowerPC 64 con QEMU)
+#   make test-app   corre la app de PS3 en la PC con un guion y la compara con el runner
 #   make oracle     regenera las tablas del oráculo de Gekko (PowerPC 750CXe en QEMU)
 #   make testdols   recompila los DOLs de prueba (tests/dol) y sus salidas esperadas
 #   make phase0     compila las pruebas de la Fase 0 (build/phase0/<prueba>.self)
@@ -28,25 +29,31 @@ include mk/ps3.mk
 include mk/host.mk
 include mk/testdols.mk
 
-.PHONY: all ps3 phase0 pkg host test test-be oracle testdols run run-test logrecv clean toolchain-check docker-image docker-make help
+.PHONY: all ps3 phase0 pkg host test test-be test-app oracle testdols run run-test logrecv clean toolchain-check docker-image docker-make help
 
 all: ps3 phase0 host
 
-ps3: $(PS3_SELF)
+ps3: $(PS3_SELF) $(BUILD)/ps3/dol/.listo
 
 phase0: $(PHASE0_SELFS)
 
 pkg: $(PS3_PKG)
 
-host: $(HOST_RUNNER) $(HOST_TESTS)
+host: $(HOST_RUNNER) $(HOST_TESTS) $(APPSIM)
 
-test: $(HOST_TESTS) $(HOST_RUNNER)
+test: $(HOST_TESTS) $(HOST_RUNNER) $(APPSIM)
 	$(HOST_TESTS)
 	$(HOST_RUNNER) --version
 	python3 tools/logrecv.py --selftest
 	python3 tools/udplog_stats.py --selftest
 	python3 tools/mkiso.py --selftest
 	python3 tools/elf2dol.py --selftest
+	python3 tools/compare_log.py --selftest --runner $(HOST_RUNNER)
+	python3 tests/appsim/run.py $(APPSIM) --runner $(HOST_RUNNER)
+
+# Solo la app de PS3 simulada en la PC (también la corre make test)
+test-app: $(APPSIM) $(HOST_RUNNER)
+	python3 tests/appsim/run.py $(APPSIM) --runner $(HOST_RUNNER)
 
 # Pruebas unitarias en big-endian con QEMU (necesita gcc-powerpc64-linux-gnu y qemu-user)
 test-be: $(HOST_BE_TESTS)
@@ -104,4 +111,4 @@ docker-make: docker-image
 		make -j$$(nproc) BUILD=build-docker all test test-be pkg
 
 help:
-	@sed -n '3,16p' Makefile | sed 's/^# \{0,1\}//'
+	@sed -n '3,17p' Makefile | sed 's/^# \{0,1\}//'

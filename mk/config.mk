@@ -9,7 +9,7 @@ export PS3DEV PSL1GHT
 BUILD     ?= build
 
 APP       := gc-ps3
-TITLE     := GC-PS3 Fase 0
+TITLE     := GC-PS3 Fase 1
 APPID     := GCPS00001
 CONTENTID := UP0001-$(APPID)_00-0000000000000000
 

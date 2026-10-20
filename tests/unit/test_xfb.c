@@ -22,10 +22,12 @@
 #include <string.h>
 
 #include "core/crc32.h"
+#include "core/frames.h"
 #include "core/log.h"
 #include "core/png.h"
 #include "core/system.h"
 #include "core/xfb.h"
+#include "dol_build.h"
 #include "test.h"
 
 static int near(int a, int b) { return a - b <= 2 && b - a <= 2; }
@@ -250,10 +252,73 @@ static void test_png(void)
     CHECK(ok);
 }
 
+/* ---- los cuadros que avisa la VI ---------------------------------------------------- */
+
+static gc_frame_t seen[8];
+static int nseen;
+
+static void record(void *ctx, const gc_frame_t *f)
+{
+    (void)ctx;
+    if (nseen < 8)
+        seen[nseen] = *f;
+    nseen++;
+}
+
+static void test_frames(void)
+{
+    static const uint32_t spin[] = { 0x38600000u, 0x38630001u, 0x4BFFFFFCu };
+    static dolb_t b;
+    static uint8_t rgb[640 * 480 * 3];
+    static gc_frames_t frames;
+    const gc_boot_config_t cfg = { 0, 0 };
+    gc_log_set_sink(quiet);
+    CHECK(gc_system_init(&sys) == 0);
+    dolb_init(&b);
+    dolb_code(&b, 0, 0x80003100u, spin, 3);
+    dolb_entry(&b, 0x80003100u);
+    CHECK(gc_system_boot_dol(&sys, b.buf, b.len, &cfg) == GC_DOL_OK);
+    gc_frames_attach(&frames, &sys, rgb, sizeof rgb, record, NULL);
+    nseen = 0;
+
+    /* 480i con el XFB en 0x00100000 (como tests/dol/video.c), todo rojo */
+    const uint32_t vi = 0xCC002000u;
+    gc_write16(&sys.mem, vi + VI_VTR, 0x0F06);
+    gc_write32(&sys.mem, vi + VI_VTO, 0x00030018u);
+    gc_write32(&sys.mem, vi + VI_VTE, 0x00020019u);
+    gc_write16(&sys.mem, vi + VI_CLOCK, 0);
+    gc_write32(&sys.mem, vi + VI_TFBL, 0x10008000u);
+    gc_write32(&sys.mem, vi + VI_BFBL, 0x10008028u);
+    gc_write16(&sys.mem, vi + VI_HSW, 0x2850);
+    fill_field(0x100000, 640, 480, 1280, RED);
+
+    const uint64_t field = 525ull * 15444;
+    gc_system_run(&sys, 2 * field + 7722);             /* dos campos: el mismo cuadro */
+    CHECK(nseen == 1);
+    CHECK(seen[0].number == 1 && seen[0].width == 640 && seen[0].height == 480);
+    CHECK(row_is(seen[0].rgb, 640, 0, RED) && row_is(seen[0].rgb, 640, 479, RED));
+    const uint32_t red_crc = seen[0].crc;
+    CHECK_EQ_U64(red_crc, gc_crc32(0, rgb, sizeof rgb));
+
+    fill_field(0x100000, 640, 2, 1280, BLUE);          /* cambia la primera línea de cada campo */
+    gc_system_run(&sys, 2 * field);
+    CHECK(nseen == 2);
+    CHECK(seen[1].number == 2 && seen[1].crc != red_crc && seen[1].field > seen[0].field);
+    CHECK(row_is(seen[1].rgb, 640, 0, BLUE) && row_is(seen[1].rgb, 640, 1, BLUE));
+    CHECK(row_is(seen[1].rgb, 640, 2, RED));
+
+    gc_frames_attach(&frames, &sys, rgb, 1000, record, NULL);   /* no entra: se cuenta */
+    gc_system_run(&sys, field);
+    CHECK(nseen == 2 && frames.too_big >= 1);
+    gc_system_free(&sys);
+    gc_log_set_sink(NULL);
+}
+
 const test_case_t xfb_tests[] = {
     { "crc32: el de zlib, por partes", test_crc32 },
     { "xfb: YUV a RGB (barras al 75 %, extremos, pares de píxeles)", test_yuv_to_rgb },
     { "xfb: cuadro con los dos campos, orden por PRB, un campo, faltantes", test_weave },
     { "png: bloques con CRC, zlib stored con Adler-32, filas sin filtro", test_png },
+    { "cuadros: uno por CRC distinto al terminar cada campo, búfer chico", test_frames },
     { NULL, NULL },
 };
