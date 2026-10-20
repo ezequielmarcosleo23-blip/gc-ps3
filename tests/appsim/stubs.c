@@ -21,11 +21,14 @@
  * La app de PS3 (src/platform/ps3/main.c) corriendo en la PC: versiones de
  * prueba de lo que usa de la PS3. `make test-app` la corre con un guion.
  *
- *   - Mando: el guion de la variable GUION, "cuadro:botones,..." con los
- *     botones en hexadecimal como los arma la app (DIGITAL1 | DIGITAL2 << 8).
- *     En vez de botones puede ir "xmb" (abrir y cerrar el menú del sistema:
- *     DRAW_BEGIN y DRAW_END) o "salir" (EXIT_GAME, como al cerrar el juego).
- *     Cada botón se aprieta un solo cuadro de la PS3.
+ *   - Mando: el guion de la variable GUION, "cuadros:qué,..." donde cuadros
+ *     es un cuadro de la PS3 ("30") o un tramo mantenido ("60-95") y qué es:
+ *       - botones en hexadecimal como los arma la app (DIGITAL1 | DIGITAL2 << 8);
+ *       - "ly" y un valor hexadecimal: la palanca izquierda en el eje vertical
+ *         (0x80 al centro, "lyff" abajo del todo);
+ *       - "xmb": abrir y cerrar el menú del sistema (DRAW_BEGIN y DRAW_END);
+ *       - "salir": EXIT_GAME, como al cerrar el juego desde el sistema.
+ *     Como el de la PS3, ioPadGetData da len 0 si nada cambió.
  *   - Reloj: RELOJ fija la hora (segundos Unix); sin RELOJ, la de la PC.
  *     El reloj de microsegundos avanza 1 ms en cada lectura, así que cada
  *     cuadro de la PS3 corre lo mismo en cualquier máquina (15 tramos de la
@@ -33,7 +36,8 @@
  *   - rsxkit: no dibuja. Cada subida de cuadro se pasa de nuevo a RGB y se
  *     anota su CRC-32 ("sim: subida ..." en stderr), que debe ser el del
  *     cuadro de la VI.
- *   - lv2: los archivos y carpetas con POSIX.
+ *   - lv2: los archivos y carpetas con POSIX; "/dev_hdd0/..." es la carpeta
+ *     "dev_hdd0" del directorio actual.
  *   - Log: a stdout, una línea por mensaje (como la TTY de RPCS3).
  */
 #define _DEFAULT_SOURCE
@@ -63,10 +67,11 @@
 #define SCRIPT_MAX  128
 #define FRAME_LIMIT 20000u          /* cuadros de la PS3: el guion se colgó */
 
-enum { EV_BUTTONS, EV_XMB, EV_EXIT };
+enum { EV_BUTTONS, EV_STICK, EV_XMB, EV_EXIT };
 
 typedef struct event {
-    unsigned frame, buttons;
+    unsigned from, to;              /* cuadros de la PS3, inclusive */
+    unsigned value;                 /* botones o posición de la palanca */
     int kind;
 } event_t;
 
@@ -79,17 +84,29 @@ static uint64_t clock_us;
 static sysutilCallback sysutil_fn;
 static void *sysutil_user;
 
+static void bad_script(const char *at)
+{
+    fprintf(stderr, "sim: GUION mal escrito en \"%s\"\n", at);
+    exit(2);
+}
+
 static void load_script(void)
 {
     const char *s = getenv("GUION");
     while (s && *s && nscript < SCRIPT_MAX) {
         event_t *e = &script[nscript];
         char *end;
-        e->frame = (unsigned)strtoul(s, &end, 10);
-        if (end == s || *end != ':') {
-            fprintf(stderr, "sim: GUION mal escrito en \"%s\"\n", s);
-            exit(2);
+        e->from = e->to = (unsigned)strtoul(s, &end, 10);
+        if (end == s)
+            bad_script(s);
+        if (*end == '-') {
+            s = end + 1;
+            e->to = (unsigned)strtoul(s, &end, 10);
+            if (end == s || e->to < e->from)
+                bad_script(s);
         }
+        if (*end != ':')
+            bad_script(end);
         s = end + 1;
         if (strncmp(s, "xmb", 3) == 0) {
             e->kind = EV_XMB;
@@ -99,17 +116,24 @@ static void load_script(void)
             s += 5;
         } else {
             e->kind = EV_BUTTONS;
-            e->buttons = (unsigned)strtoul(s, &end, 16);
-            if (end == s) {
-                fprintf(stderr, "sim: GUION mal escrito en \"%s\"\n", s);
-                exit(2);
+            if (strncmp(s, "ly", 2) == 0) {
+                e->kind = EV_STICK;
+                s += 2;
             }
+            e->value = (unsigned)strtoul(s, &end, 16);
+            if (end == s)
+                bad_script(s);
             s = end;
         }
         nscript++;
         while (*s == ',')
             s++;
     }
+}
+
+static int active(const event_t *e, int kind)
+{
+    return e->kind == kind && frame >= e->from && frame <= e->to;
 }
 
 /* ---- mando --------------------------------------------------------------------------- */
@@ -134,15 +158,25 @@ s32 ioPadGetInfo(padInfo *info)
 
 s32 ioPadGetData(u32 port, padData *data)
 {
+    static unsigned last_buttons = ~0u, last_ly = ~0u;
+    unsigned buttons = 0, ly = 0x80;
     (void)port;
+    for (int k = 0; k < nscript; k++) {
+        if (active(&script[k], EV_BUTTONS))
+            buttons = script[k].value;
+        if (active(&script[k], EV_STICK))
+            ly = script[k].value;
+    }
     memset(data, 0, sizeof *data);
-    unsigned b = 0;
-    for (int k = 0; k < nscript; k++)
-        if (script[k].kind == EV_BUTTONS && script[k].frame == frame)
-            b = script[k].buttons;
-    data->len = 24;
-    data->button[2] = (u16)(b & 0xFF);
-    data->button[3] = (u16)(b >> 8);
+    if (buttons == last_buttons && ly == last_ly)
+        return 0;                   /* len 0: sin cambios */
+    last_buttons = buttons;
+    last_ly = ly;
+    data->len = 8;
+    data->button[2] = (u16)(buttons & 0xFF);
+    data->button[3] = (u16)((buttons >> 8) & 0xFF);
+    data->button[4] = data->button[5] = data->button[6] = 0x80;
+    data->button[7] = (u16)(ly & 0xFF);
     return 0;
 }
 
@@ -174,12 +208,10 @@ s32 sysUtilUnregisterCallback(s32 slot)
 s32 sysUtilCheckCallback(void)
 {
     for (int k = 0; k < nscript && sysutil_fn; k++) {
-        if (script[k].frame != frame)
-            continue;
-        if (script[k].kind == EV_XMB) {
+        if (active(&script[k], EV_XMB)) {
             sysutil_fn(SYSUTIL_DRAW_BEGIN, 0, sysutil_user);
             sysutil_fn(SYSUTIL_DRAW_END, 0, sysutil_user);
-        } else if (script[k].kind == EV_EXIT) {
+        } else if (active(&script[k], EV_EXIT)) {
             sysutil_fn(SYSUTIL_EXIT_GAME, 0, sysutil_user);
         }
     }
@@ -190,10 +222,20 @@ void ps3_env_detect(ps3_env_t *env) { memset(env, 0, sizeof *env); }
 
 /* ---- archivos (lv2) ------------------------------------------------------------------ */
 
+/* "/dev_hdd0/x" es "dev_hdd0/x" en el directorio actual */
+static const char *host_path(const char *path, char *buf, size_t size)
+{
+    if (strncmp(path, "/dev_hdd0/", 10) != 0)
+        return path;
+    snprintf(buf, size, "%s", path + 1);
+    return buf;
+}
+
 s32 sysLv2FsStat(const char *path, sysFSStat *st)
 {
     struct stat s;
-    if (stat(path, &s) != 0)
+    char buf[512];
+    if (stat(host_path(path, buf, sizeof buf), &s) != 0)
         return -1;
     memset(st, 0, sizeof *st);
     st->st_mode = (s32)s.st_mode;
@@ -207,7 +249,8 @@ s32 sysLv2FsOpen(const char *path, s32 oflags, s32 *fd, u32 mode, const void *ar
     (void)mode;
     (void)arg;
     (void)argsize;
-    const int f = open(path, O_RDONLY);
+    char buf[512];
+    const int f = open(host_path(path, buf, sizeof buf), O_RDONLY);
     if (f < 0)
         return -1;
     *fd = f;
@@ -230,10 +273,11 @@ static DIR *dirs[DIRS_MAX];
 
 s32 sysLv2FsOpenDir(const char *path, s32 *fd)
 {
+    char buf[512];
     for (int k = 0; k < DIRS_MAX; k++) {
         if (dirs[k])
             continue;
-        if (!(dirs[k] = opendir(path)))
+        if (!(dirs[k] = opendir(host_path(path, buf, sizeof buf))))
             return -1;
         *fd = k;
         return 0;

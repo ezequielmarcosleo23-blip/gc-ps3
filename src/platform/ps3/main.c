@@ -21,7 +21,9 @@
  * La app de PS3: un menú con los DOLs y el núcleo corriendo el elegido.
  *
  *   - DOLs: los que trae la app (USRDIR/dol, o "dol" al lado del .self) y
- *     los de /dev_hdd0/gcps3/dol. Cruz corre el elegido; triángulo sale.
+ *     los de /dev_hdd0/gcps3/dol. Arriba y abajo (cruceta o palanca
+ *     izquierda, con repetición si se mantiene) eligen; cruz corre el
+ *     elegido; triángulo sale.
  *   - Corriendo: el núcleo avanza por tramos de hasta 15 ms por cuadro de la
  *     PS3; cada cuadro de la VI se pasa a RGB en el PPU (core/xfb.c, el mismo
  *     código del runner) y se muestra a 4:3 con rsxkit. Círculo vuelve al menú.
@@ -66,12 +68,23 @@
 #define BUDGET_US       15000u            /* emulación por cuadro de la PS3 */
 #define UI_W            1280.0f
 #define UI_H            720.0f
+#define STICK_UP        0x40u             /* palanca izquierda: arriba por debajo de esto */
+#define STICK_DOWN      0xC0u             /* y abajo por encima (0x80 es el centro) */
+#define REPEAT_DELAY    24u               /* cuadros de la PS3 antes de repetir arriba/abajo */
+#define REPEAT_EVERY    6u
 
 /* Botones: DIGITAL1 en el byte bajo, DIGITAL2 en el alto (io/pad.h) */
 enum {
     BTN_START = 1u << 3, BTN_UP = 1u << 4, BTN_DOWN = 1u << 6,
     BTN_TRIANGLE = 1u << 12, BTN_CIRCLE = 1u << 13, BTN_CROSS = 1u << 14,
 };
+
+/* El mando que se usa: el primero conectado */
+typedef struct pad_state {
+    int           port;                   /* -1: ninguno */
+    uint32_t      digital;                /* DIGITAL1 | DIGITAL2 << 8 */
+    uint8_t       lx, ly;                 /* palanca izquierda */
+} pad_state_t;
 
 typedef struct app {
     ps3_dol_t     dols[MAX_DOLS];
@@ -89,6 +102,7 @@ typedef struct app {
 
 static gc_system_t sys;
 static app_t app;
+static pad_state_t pad = { -1, 0, 0x80, 0x80 };
 static volatile int quit, after_system;
 
 static void sysutil_cb(u64 status, u64 param, void *user)
@@ -129,23 +143,51 @@ static uint64_t rtc_now(void)
     return sec > GC_EPOCH_UNIX ? sec - GC_EPOCH_UNIX : 0;
 }
 
-/* Botones del primer mando conectado (ioPadGetData no repite si no cambió) */
+/* Botones del primer mando conectado (ioPadGetData da len 0 si nada cambió).
+ * La palanca izquierda también vale como arriba y abajo. */
 static uint32_t read_pad(void)
 {
-    static uint32_t held;
     padInfo info;
-    if (ioPadGetInfo(&info) != 0)
-        return held;
-    for (u32 p = 0; p < MAX_PADS; p++) {
-        if (!info.status[p])
-            continue;
-        padData d;
-        if (ioPadGetData(p, &d) == 0 && d.len > 0)
-            held = (d.button[2] & 0xFFu) | (uint32_t)(d.button[3] & 0xFFu) << 8;
-        return held;
+    int port = -1;
+    if (ioPadGetInfo(&info) == 0)
+        for (u32 p = 0; p < MAX_PADS && port < 0; p++)
+            if (info.status[p])
+                port = (int)p;
+    if (port != pad.port) {
+        if (port < 0)
+            LOGW("app: sin mando");
+        else
+            LOGI("app: mando en el puerto %d", port + 1);
+        pad.port = port;
+        pad.digital = 0;
+        pad.lx = pad.ly = 0x80;
     }
-    held = 0;
-    return 0;
+    if (port >= 0) {
+        padData d;
+        if (ioPadGetData((u32)port, &d) == 0 && d.len > 0) {
+            pad.digital = (d.button[2] & 0xFFu) | (uint32_t)(d.button[3] & 0xFFu) << 8;
+            if (d.len >= 8) {
+                pad.lx = (uint8_t)d.button[6];
+                pad.ly = (uint8_t)d.button[7];
+            }
+        }
+    }
+    uint32_t held = pad.digital;
+    if (pad.ly < STICK_UP)
+        held |= BTN_UP;
+    else if (pad.ly > STICK_DOWN)
+        held |= BTN_DOWN;
+    return held;
+}
+
+/* Arriba o abajo mantenidos se repiten: después de REPEAT_DELAY cuadros, cada
+ * REPEAT_EVERY */
+static uint32_t repeat(uint32_t held)
+{
+    static unsigned frames;
+    const uint32_t dir = held & (BTN_UP | BTN_DOWN);
+    frames = dir ? frames + 1 : 0;
+    return frames > REPEAT_DELAY && (frames - REPEAT_DELAY) % REPEAT_EVERY == 0 ? dir : 0;
 }
 
 /* ---- correr un DOL ------------------------------------------------------------------ */
@@ -262,7 +304,14 @@ static void draw_menu(const app_t *a)
         snprintf(line, sizeof line, "%s%s", a->dols[k].name, a->dols[k].bundled ? "" : "  (hdd)");
         rsxkit_ui_text(90, y, line, 2.0f, k == a->cursor ? 0xFFFFFFFFu : 0xB0B8D0FFu, 40);
     }
-    rsxkit_ui_text(80, 660, "Cruz: correr    Triángulo: salir", 2.0f, 0x90A0C0FFu, 0);
+    rsxkit_ui_text(80, 640, "Arriba/abajo: elegir    Cruz: correr    Triángulo: salir", 2.0f,
+                   0x90A0C0FFu, 0);
+    if (pad.port < 0)
+        snprintf(line, sizeof line, "sin mando");
+    else
+        snprintf(line, sizeof line, "mando %d: botones 0x%04x, palanca %u,%u", pad.port + 1,
+                 (unsigned)pad.digital, (unsigned)pad.lx, (unsigned)pad.ly);
+    rsxkit_ui_text(80, 680, line, 1.5f, 0x7080A0FFu, 0);
 }
 
 static void draw_status(const app_t *a)
@@ -357,12 +406,16 @@ int main(int argc, char **argv)
             rsxkit_after_system();
         }
         const uint32_t held = read_pad(), pressed = held & ~prev;
+        if (held != prev)
+            LOGI("app: botones 0x%04x (mando 0x%04x, palanca %u,%u)", (unsigned)held,
+                 (unsigned)pad.digital, (unsigned)pad.lx, (unsigned)pad.ly);
         prev = held;
+        const uint32_t move = pressed | repeat(held);   /* arriba/abajo del menú */
 
         if (!a->running) {
-            if ((pressed & BTN_UP) && a->cursor > 0)
+            if ((move & BTN_UP) && a->cursor > 0)
                 a->cursor--;
-            if ((pressed & BTN_DOWN) && a->cursor + 1 < a->ndols)
+            if ((move & BTN_DOWN) && a->cursor + 1 < a->ndols)
                 a->cursor++;
             if ((pressed & BTN_CROSS) && a->ndols > 0)
                 start(a, &a->dols[a->cursor]);

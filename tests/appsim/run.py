@@ -6,8 +6,8 @@
 """Corre la app de PS3 simulada en la PC (make test-app) y revisa su log.
 
 La app (build/host/appsim/gc-ps3-appsim, ver tests/appsim/stubs.c) recorre el
-menú con un guion de botones: contador, cpu, hw, pantalla y timer, con dos
-vueltas por el menú del sistema y un cierre desde el sistema con timer
+menú con un guion de botones y la palanca: contador, cpu, hw, pantalla y timer,
+con dos vueltas por el menú del sistema y un cierre desde el sistema con timer
 corriendo. Con el reloj fijo el log sale siempre igual. Se revisa:
 
   - tools/compare_log.py: cada corrida igual al runner (salida y cuadros);
@@ -15,7 +15,9 @@ corriendo. Con el reloj fijo el log sale siempre igual. Se revisa:
   - el cuadro de pantalla (CRC 0x10589e8c) y varios cuadros de contador;
   - que cada cuadro avisado se subió a rsxkit y que la subida (XRGB8888,
     vuelta a RGB) tiene el mismo CRC;
-  - que la app volvió del menú del sistema y salió por EXIT_GAME.
+  - que la app volvió del menú del sistema y salió por EXIT_GAME;
+  - el menú: topes, cruceta y palanca, botón mantenido y su repetición, y un
+    DOL repetido en dos carpetas que se lista una sola vez.
 
     python3 tests/appsim/run.py build/host/appsim/gc-ps3-appsim [--runner RUNNER]
 """
@@ -32,25 +34,30 @@ sys.path.insert(0, os.path.join(ROOT, "tools"))
 import compare_log  # noqa: E402
 
 UP, DOWN, CROSS, CIRCLE = 0x10, 0x40, 0x4000, 0x2000
-# Menú, por nombre: contador, cpu, hola, hw, pantalla, timer.
-# Cada cuadro de la PS3 corre 3 millones de ciclos (15 tramos de 200 000). Un botón
-# en dos cuadros seguidos es uno solo apretado: entre dos toques va un cuadro libre.
+STICK_DOWN = "lyff"               # palanca izquierda abajo del todo
+# Menú, por nombre: contador, cpu, hola, hw, pantalla, timer (de ./dol) y
+# zeta (de /dev_hdd0/gcps3/dol, donde también hay un hola.dol repetido).
+# Cada cuadro de la PS3 corre 3 millones de ciclos (15 tramos de 200 000). Un
+# botón en cuadros seguidos es uno solo apretado; (desde, hasta) lo mantiene.
 SCRIPT = [
     (1, UP),                      # ya está arriba: no se mueve
     (2, CROSS),                   # contador, 17 cuadros (unos 6 campos)
     (20, CIRCLE),
     (22, DOWN), (24, CROSS),      # cpu
     (28, CIRCLE),
-    (30, DOWN), (32, DOWN), (34, CROSS),   # hw
+    (30, STICK_DOWN), (32, STICK_DOWN),   # hola y hw con la palanca
+    (34, CROSS),                  # hw
     (38, "xmb"),                  # menú del sistema con hw ya terminado
     (40, CIRCLE),
-    (42, DOWN), (43, DOWN),       # pantalla: mantenido dos cuadros, baja uno
-    (44, CROSS),                  # pantalla, 13 cuadros
-    (52, "xmb"),                  # menú del sistema con pantalla corriendo
-    (58, CIRCLE),
-    (60, DOWN), (62, DOWN),       # timer; el segundo DOWN ya está abajo
-    (64, CROSS),
-    (68, "salir"),                # el sistema cierra la app con timer corriendo
+    ((46, 47), DOWN),             # pantalla: dos cuadros mantenido, baja uno
+    (48, CROSS),                  # pantalla, 13 cuadros
+    (56, "xmb"),                  # menú del sistema con pantalla corriendo
+    (62, CIRCLE),
+    ((64, 99), DOWN),             # timer al apretar; repite en el 93 (zeta) y en
+                                  # el 99 ya está abajo
+    (102, UP),                    # timer
+    (104, CROSS),
+    (108, "salir"),               # el sistema cierra la app con timer corriendo
 ]
 RELOJ = 1792475992                # 845791192 segundos desde 2000
 RUNS = ["contador.dol", "cpu.dol", "hw.dol", "pantalla.dol", "timer.dol"]
@@ -62,7 +69,11 @@ SIM_STATS = re.compile(r"^sim: (\d+) cuadros de la PS3, (\d+) subidas, (\d+) dib
 
 
 def guion():
-    return ",".join(f"{f}:{b}" if isinstance(b, str) else f"{f}:{b:x}" for f, b in SCRIPT)
+    out = []
+    for when, what in SCRIPT:
+        frames = f"{when[0]}-{when[1]}" if isinstance(when, tuple) else str(when)
+        out.append(f"{frames}:{what}" if isinstance(what, str) else f"{frames}:{what:x}")
+    return ",".join(out)
 
 
 def main():
@@ -78,6 +89,12 @@ def main():
     for name in sorted(os.listdir(compare_log.DOLS)):
         if name.endswith((".dol", ".map")):
             shutil.copy(os.path.join(compare_log.DOLS, name), dols)
+    # /dev_hdd0/gcps3/dol: uno repetido (no se lista) y uno nuevo
+    hdd = os.path.join(work, "dev_hdd0")
+    shutil.rmtree(hdd, ignore_errors=True)
+    os.makedirs(os.path.join(hdd, "gcps3", "dol"))
+    shutil.copy(os.path.join(compare_log.DOLS, "hola.dol"), os.path.join(hdd, "gcps3", "dol"))
+    shutil.copy(os.path.join(compare_log.DOLS, "timer.dol"), os.path.join(hdd, "gcps3", "dol", "zeta.dol"))
 
     env = dict(os.environ, GUION=guion(), RELOJ=str(RELOJ))
     env.pop("TEXTO", None)
@@ -117,6 +134,9 @@ def main():
     last = SCRIPT[-1][0]
     check(len(stats) == 1 and int(stats[0].group(1)) == last + 1, f"no salió en el cuadro {last} (EXIT_GAME)")
     check(log[-1:] == ["app: salida"], "no terminó con \"app: salida\"")
+    check("app: 6 DOLs en ./dol" in log and "app: 1 DOLs en /dev_hdd0/gcps3/dol" in log,
+          "no listó 6 DOLs en ./dol y 1 (sin el repetido) en /dev_hdd0/gcps3/dol")
+    check("app: mando en el puerto 1" in log, "no avisó el mando")
 
     if bad:
         print("\n".join(sim[-5:]))

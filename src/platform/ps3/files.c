@@ -80,6 +80,11 @@ int ps3_list_dols(const char *dir, int bundled, ps3_dol_t *list, int *count, int
         const size_t len = strnlen(e.d_name, sizeof e.d_name);
         if (!ends_with_dol(e.d_name, len) || len >= PS3_NAME_MAX || *count >= max)
             continue;
+        int seen = 0;
+        for (int k = 0; k < *count && !seen; k++)
+            seen = strlen(list[k].name) == len && memcmp(list[k].name, e.d_name, len) == 0;
+        if (seen)
+            continue;                         /* ya vino de una carpeta anterior */
         ps3_dol_t *d = &list[*count];
         snprintf(d->name, sizeof d->name, "%.*s", (int)len, e.d_name);
         snprintf(d->path, sizeof d->path, "%s/%s", dir, d->name);

@@ -42,8 +42,9 @@ typedef struct ps3_dol {
 int ps3_read_file(const char *path, uint8_t **data, size_t *len, size_t max);
 
 /* Agrega los .dol de dir a list (desde *count, hasta max) y los deja
- * ordenados por nombre. Una carpeta que no existe no es error. Devuelve
- * cuántos agregó. */
+ * ordenados por nombre. Un nombre que ya está en la lista no se agrega (vale
+ * el de la carpeta listada antes). Una carpeta que no existe no es error.
+ * Devuelve cuántos agregó. */
 int ps3_list_dols(const char *dir, int bundled, ps3_dol_t *list, int *count, int max);
 
 /* La ruta del .map al lado de un .dol (misma ruta, otra extensión). */
