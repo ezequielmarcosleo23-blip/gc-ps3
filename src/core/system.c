@@ -54,7 +54,10 @@ int gc_system_init(gc_system_t *s)
     if (gc_mem_init(&s->mem) != 0)
         return -1;
     gekko_reset(&s->cpu, &s->mem);
+    s->cpu.hle = gc_hle_dispatch;
+    s->cpu.hle_ctx = s;
     gc_sched_init(&s->sched);
+    gc_hle_reset(&s->hle);
     return 0;
 }
 
@@ -70,7 +73,10 @@ void gc_system_hle_boot(gc_system_t *s, const gc_boot_config_t *cfg, uint32_t en
 
     memset(m->ram, 0, GC_RAM_SIZE);
     gekko_reset(c, m);
+    c->hle = gc_hle_dispatch;
+    c->hle_ctx = s;
     gc_sched_init(&s->sched);
+    gc_hle_reset(&s->hle);
 
     c->msr = MSR_FP | MSR_IR | MSR_DR | MSR_RI;           /* 0x2032 */
     c->spr[SPR_HID0] = 0x0011C464u;                        /* cachés, BHT, BTIC... */
@@ -94,6 +100,10 @@ void gc_system_hle_boot(gc_system_t *s, const gc_boot_config_t *cfg, uint32_t en
     gc_write32(m, LOW_CPU_CLOCK, GC_CPU_CLOCK);
     gc_write64(m, LOW_SYSTEM_TIME, (cfg ? cfg->rtc : 0) * (uint64_t)GC_TB_CLOCK);
 
+    /* DEC con el bit 0 ya en 1: no hay un decrementador pendiente del arranque
+     * (como en Dolphin, que no lo dispara hasta que el programa escribe DEC). */
+    c->dec = 0xFFFFFFFFu;
+
     c->pc = entry;
     gekko_fpu_sync(c);
 }
@@ -116,6 +126,11 @@ gc_dol_error_t gc_system_boot_dol(gc_system_t *s, const uint8_t *data, size_t le
     GC_LOGI("dol: cargado, entrada 0x%08x, BSS 0x%08x (%u bytes)", (unsigned)dol.entry,
             (unsigned)dol.bss_addr, (unsigned)dol.bss_size);
     return GC_DOL_OK;
+}
+
+int gc_system_load_map(gc_system_t *s, const char *text, size_t len)
+{
+    return gc_hle_load_map(s, text, len);
 }
 
 uint64_t gc_system_run(gc_system_t *s, uint64_t cycles)

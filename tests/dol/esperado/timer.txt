@@ -1,0 +1,3 @@
+timer: periodo 2000 ticks, espero 10 interrupciones
+timer: 10 interrupciones
+timer: tiempo OK (dentro del 5% de 20010 ticks)

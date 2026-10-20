@@ -66,5 +66,7 @@ extern const test_case_t cpu_ps_tests[];
 extern const test_case_t dol_tests[];
 extern const test_case_t sched_tests[];
 extern const test_case_t system_tests[];
+extern const test_case_t hle_tests[];
+extern const test_case_t program_tests[];
 
 #endif

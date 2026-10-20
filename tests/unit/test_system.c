@@ -79,6 +79,7 @@ static void test_boot_state(void)
     CHECK(c->spr[SPR_IBAT0U] == 0x80001FFFu && c->spr[SPR_IBAT0L] == 2);
     CHECK(c->spr[SPR_DBAT1U] == 0xC0001FFFu && c->spr[SPR_DBAT1L] == 0x2A);
     CHECK(c->spr[SPR_ECID_U] == 0x0D96E200u);
+    CHECK(c->dec == 0xFFFFFFFFu && !c->dec_pending);   /* sin decrementador pendiente */
     CHECK(gc_read32(m, 0x80000900u) == 0x4C000064u && gc_read32(m, 0x80001700u) == 0x4C000064u);
     CHECK(gc_read32(m, 0x80000020u) == 0x0D15EA5Eu);
     CHECK(gc_read32(m, 0x80000028u) == 0x01800000u);

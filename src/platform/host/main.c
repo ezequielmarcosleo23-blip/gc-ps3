@@ -6,13 +6,17 @@
  *
  *   gc-ps3-runner [opciones] programa.dol
  *     --ciclos N       cuántos ciclos de CPU correr (por omisión 486 000 000 = 1 s)
+ *     --map ARCHIVO    símbolos para los ganchos de depuración (formato de Dolphin;
+ *                      por omisión, el .map al lado del DOL si existe)
  *     --traza ARCHIVO  una línea por instrucción: "pc instrucción" en hexadecimal
  *     --pal            el IPL dejó modo PAL (por omisión NTSC)
  *     --rtc SEGUNDOS   reloj al arrancar, en segundos desde el 2000-01-01
  *                      (por omisión, la hora de la PC)
  *
- * Sale con 0 si el DOL corrió, 1 si no se pudo cargar y 2 si las opciones
- * están mal.
+ * Lo que el programa imprime (OSReport, printf...) sale por la salida estándar;
+ * los mensajes del emulador, por la de error. Sale con el código de exit() del
+ * programa (o 0 si se acabaron los ciclos), 1 si no se pudo cargar y 2 si las
+ * opciones están mal.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,6 +35,7 @@ static void usage(FILE *out, const char *argv0)
     fprintf(out,
             "uso: %s [opciones] programa.dol\n"
             "  --ciclos N       ciclos de CPU a correr (por omision %u, 1 s)\n"
+            "  --map ARCHIVO    simbolos para los ganchos (por omision, el .map del DOL)\n"
             "  --traza ARCHIVO  pc e instruccion de cada paso\n"
             "  --pal            modo de video PAL (por omision NTSC)\n"
             "  --rtc SEGUNDOS   reloj al arrancar, segundos desde el 2000-01-01\n"
@@ -55,9 +60,33 @@ static uint8_t *read_file(const char *path, size_t *len)
     return buf;
 }
 
+static gc_system_t sys;
+static FILE *trace_file;
+
+/* La traza muestra la instrucción original también donde hay un gancho. */
 static void trace_line(void *ctx, uint32_t pc, uint32_t inst)
 {
-    fprintf((FILE *)ctx, "%08x %08x\n", (unsigned)pc, (unsigned)inst);
+    (void)ctx;
+    fprintf(trace_file, "%08x %08x\n", (unsigned)pc, (unsigned)gc_hle_original(&sys, inst));
+}
+
+static void report_line(void *ctx, const char *line)
+{
+    (void)ctx;
+    printf("%s\n", line);
+    fflush(stdout);
+}
+
+/* programa.dol -> programa.map */
+static void default_map(const char *dol, char *out, size_t cap)
+{
+    snprintf(out, cap, "%s", dol);
+    char *dot = strrchr(out, '.');
+    char *slash = strrchr(out, '/');
+    if (dot && (!slash || dot > slash) && (size_t)(dot - out) + 5 <= cap)
+        strcpy(dot, ".map");
+    else
+        out[0] = '\0';
 }
 
 static int parse_u64(const char *s, uint64_t *out)
@@ -75,7 +104,7 @@ static int parse_u64(const char *s, uint64_t *out)
 int main(int argc, char **argv)
 {
     uint64_t cycles = DEFAULT_CYCLES;
-    const char *dol_path = NULL, *trace_path = NULL;
+    const char *dol_path = NULL, *trace_path = NULL, *map_path = NULL;
     gc_boot_config_t cfg = { 0, 0 };
     int have_rtc = 0;
 
@@ -92,6 +121,12 @@ int main(int argc, char **argv)
                 fprintf(stderr, "--ciclos necesita un numero\n");
                 return 2;
             }
+        } else if (strcmp(a, "--map") == 0) {
+            if (++i >= argc) {
+                fprintf(stderr, "--map necesita un archivo\n");
+                return 2;
+            }
+            map_path = argv[i];
         } else if (strcmp(a, "--traza") == 0) {
             if (++i >= argc) {
                 fprintf(stderr, "--traza necesita un archivo\n");
@@ -133,7 +168,6 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    static gc_system_t sys;
     if (gc_system_init(&sys) != 0) {
         fprintf(stderr, "sin memoria para la GameCube emulada\n");
         free(data);
@@ -147,28 +181,54 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    FILE *trace = NULL;
+    char guess[1024];
+    if (!map_path) {
+        default_map(dol_path, guess, sizeof guess);
+        FILE *probe = guess[0] ? fopen(guess, "rb") : NULL;
+        if (probe) {
+            fclose(probe);
+            map_path = guess;
+        }
+    }
+    if (map_path) {
+        size_t map_len = 0;
+        uint8_t *map = read_file(map_path, &map_len);
+        if (!map) {
+            fprintf(stderr, "%s: no se pudo leer\n", map_path);
+            gc_system_free(&sys);
+            return 1;
+        }
+        gc_system_load_map(&sys, (const char *)map, map_len);
+        free(map);
+    }
+    sys.hle.report = report_line;
+
     if (trace_path) {
-        trace = fopen(trace_path, "w");
-        if (!trace) {
+        trace_file = fopen(trace_path, "w");
+        if (!trace_file) {
             fprintf(stderr, "%s: no se pudo crear\n", trace_path);
             gc_system_free(&sys);
             return 1;
         }
-        setvbuf(trace, NULL, _IOFBF, 1u << 20);
+        setvbuf(trace_file, NULL, _IOFBF, 1u << 20);
         sys.cpu.trace = trace_line;
-        sys.cpu.trace_ctx = trace;
     }
 
     const clock_t t0 = clock();
     const uint64_t ran = gc_system_run(&sys, cycles);
     const double secs = (double)(clock() - t0) / CLOCKS_PER_SEC;
 
-    if (trace)
-        fclose(trace);
+    gc_hle_flush(&sys);
+    if (trace_file)
+        fclose(trace_file);
     fprintf(stderr, "runner: %llu ciclos en %.2f s (%.1f MIPS), pc = 0x%08x, %u instrucciones ilegales\n",
             (unsigned long long)ran, secs, secs > 0 ? (double)ran / secs / 1e6 : 0.0,
             (unsigned)sys.cpu.pc, (unsigned)sys.cpu.illegal);
+    const int code = sys.hle.exited ? (int)(sys.hle.exit_code & 0xFFu) : 0;
+    if (sys.hle.exited)
+        fprintf(stderr, "runner: el programa termino con exit(%d)\n", (int)sys.hle.exit_code);
+    else
+        fprintf(stderr, "runner: se acabaron los ciclos sin exit\n");
     gc_system_free(&sys);
-    return 0;
+    return code;
 }

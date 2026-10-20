@@ -159,7 +159,16 @@ typedef struct gekko {
     /* Traza opcional: se llama con cada instrucción antes de ejecutarla. */
     void    (*trace)(void *ctx, uint32_t pc, uint32_t inst);
     void     *trace_ctx;
+
+    /* Ganchos HLE: la instrucción GEKKO_HLE_INST(n) (opcode primario 1, que
+     * Gekko no usa) llama a hle(ctx, c, n), que devuelve la instrucción
+     * original del lugar; después esa se ejecuta normalmente. */
+    uint32_t (*hle)(void *ctx, struct gekko *c, uint32_t index);
+    void     *hle_ctx;
 } gekko_t;
+
+#define GEKKO_HLE_OPCODE   1u
+#define GEKKO_HLE_INST(n)  (0x04000000u | ((n) & 0x03FFFFFFu))
 
 /* Estado de un Gekko recién encendido, sin el IPL: PC = 0xFFF00100, MSR = IP,
  * HID1 = 0x80000000 (CPU a 3 veces el bus) y el ECID de Dolphin. */

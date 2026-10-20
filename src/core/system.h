@@ -31,6 +31,7 @@
 #include <stdint.h>
 
 #include "core/dol.h"
+#include "core/hle.h"
 #include "core/mem.h"
 #include "core/sched.h"
 #include "cpu/gekko.h"
@@ -49,6 +50,7 @@ typedef struct gc_system {
     gc_mem_t   mem;
     gekko_t    cpu;
     gc_sched_t sched;
+    gc_hle_t   hle;
 } gc_system_t;
 
 /* Reserva la memoria y deja la CPU recién encendida. 0, o -1 sin memoria. */
@@ -61,6 +63,9 @@ void gc_system_hle_boot(gc_system_t *s, const gc_boot_config_t *cfg, uint32_t en
 /* Valida y carga el DOL y arranca en su entrada. Si falla, no cambia nada. */
 gc_dol_error_t gc_system_boot_dol(gc_system_t *s, const uint8_t *data, size_t len,
                                   const gc_boot_config_t *cfg);
+
+/* Engancha las funciones conocidas de un .map (después de cargar el DOL). */
+int gc_system_load_map(gc_system_t *s, const char *text, size_t len);
 
 /* Corre hasta `cycles` ciclos de CPU atendiendo los eventos a tiempo; vuelve
  * antes si se prende cpu.stop. Devuelve los ciclos corridos. */

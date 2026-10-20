@@ -23,6 +23,7 @@ Cómo deja `gc_system_boot_dol` (`src/core/system.c`) la máquina antes de la pr
 | PVR | `0x00083214` | Gekko 2.4e, el de las consolas de venta |
 | ECID | `0x0D96E200`, `0x1840C00D`, `0x82BB08E8` | Identificador del chip (el de Dolphin) |
 | FPSCR | 0 | Redondeo al más cercano |
+| DEC | `0xFFFFFFFF` | Con el bit 0 en 1 no queda un decrementador pendiente del arranque; Dolphin tampoco lo dispara hasta que el programa escribe DEC |
 
 Los BAT se guardan para quien los lea; la memoria emulada no traduce direcciones (D-008, D-026).
 
@@ -40,6 +41,10 @@ Los BAT se guardan para quien los lea; la memoria emulada no traduce direcciones
 | `0x800030D8` | segundos × 40 500 000 | Hora del sistema en ticks de timebase desde el 2000-01-01 (`--rtc` en el runner; por omisión la de la PC) |
 
 En los vectores de excepción `0x100`, `0x200`, `0x300`, `0x400`, `0x500`, `0x600`, `0x700`, `0x800`, `0x900`, `0xC00`, `0xD00`, `0xF00`, `0x1300`, `0x1400` y `0x1700` queda un `rfi`: una excepción antes de que el programa instale sus manejadores vuelve sin romper nada.
+
+## Después del arranque
+
+Si hay un `.map` (el runner busca el que está al lado del DOL), se enganchan las funciones de depuración conocidas (`src/core/hle_os.c`): lo que imprimen va al log y `exit` detiene la CPU (D-033).
 
 ## Pendiente para etapas siguientes
 

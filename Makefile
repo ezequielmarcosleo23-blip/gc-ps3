@@ -6,6 +6,7 @@
 #   make test       compila y ejecuta las pruebas unitarias en PC (ASan + UBSan)
 #   make test-be    las mismas pruebas en big-endian (PowerPC 64 con QEMU)
 #   make oracle     regenera las tablas del oráculo de Gekko (PowerPC 750CXe en QEMU)
+#   make testdols   recompila los DOLs de prueba (tests/dol) y sus salidas esperadas
 #   make phase0     compila las pruebas de la Fase 0 (build/phase0/<prueba>.self)
 #   make logrecv    escucha el log UDP de la consola o de RPCS3 (Ctrl+C para salir)
 #   make pkg        genera el .pkg instalable
@@ -25,8 +26,9 @@ include tools/toolchain.env
 include mk/spu.mk
 include mk/ps3.mk
 include mk/host.mk
+include mk/testdols.mk
 
-.PHONY: all ps3 phase0 pkg host test test-be oracle run run-test logrecv clean toolchain-check docker-image docker-make help
+.PHONY: all ps3 phase0 pkg host test test-be oracle testdols run run-test logrecv clean toolchain-check docker-image docker-make help
 
 all: ps3 phase0 host
 
@@ -44,6 +46,7 @@ test: $(HOST_TESTS) $(HOST_RUNNER)
 	python3 tools/logrecv.py --selftest
 	python3 tools/udplog_stats.py --selftest
 	python3 tools/mkiso.py --selftest
+	python3 tools/elf2dol.py --selftest
 
 # Pruebas unitarias en big-endian con QEMU (necesita gcc-powerpc64-linux-gnu y qemu-user)
 test-be: $(HOST_BE_TESTS)
@@ -53,6 +56,9 @@ test-be: $(HOST_BE_TESTS)
 oracle: $(ORACLE_BINS)
 	@mkdir -p tests/unit/data
 	for b in $(ORACLE_BINS); do $(ORACLE_QEMU) $$b tests/unit/data/$$(basename $$b).bin || exit 1; done
+
+# Recompila los DOLs de prueba (necesita gcc-powerpc-linux-gnu; ver mk/testdols.mk)
+testdols: $(TESTDOLS:%=$(DOL_OUT)/%.dol) $(TESTDOLS_HOSTED:%=tests/dol/esperado/%.txt)
 
 run: $(PS3_SELF)
 	@if [ -z "$(PS3LOAD)" ]; then echo "Falta PS3LOAD, por ejemplo: make run PS3LOAD=tcp:192.168.1.50"; exit 1; fi
@@ -98,4 +104,4 @@ docker-make: docker-image
 		make -j$$(nproc) BUILD=build-docker all test test-be pkg
 
 help:
-	@sed -n '3,15p' Makefile | sed 's/^# \{0,1\}//'
+	@sed -n '3,16p' Makefile | sed 's/^# \{0,1\}//'

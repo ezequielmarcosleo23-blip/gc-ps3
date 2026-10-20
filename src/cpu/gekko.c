@@ -58,6 +58,21 @@ static void op_4(gekko_t *c, uint32_t inst)
     gekko_op_4[xo](c, inst);
 }
 
+/* Opcode 1: gancho HLE. Sin gancho registrado, es una instrucción ilegal. */
+static void op_hle(gekko_t *c, uint32_t inst)
+{
+    if (!c->hle) {
+        gekko_op_illegal(c, inst);
+        return;
+    }
+    const uint32_t orig = c->hle(c->hle_ctx, c, inst & 0x03FFFFFFu);
+    if (OPCD(orig) == GEKKO_HLE_OPCODE) {
+        gekko_op_illegal(c, orig);
+        return;
+    }
+    gekko_op_primary[OPCD(orig)](c, orig);
+}
+
 static void op_19(gekko_t *c, uint32_t inst) { gekko_op_19[XO10(inst)](c, inst); }
 static void op_31(gekko_t *c, uint32_t inst) { gekko_op_31[XO10(inst)](c, inst); }
 
@@ -89,6 +104,7 @@ static void tables_init(void)
         gekko_op_4[i] = gekko_op_19[i] = gekko_op_31[i] = gekko_op_63[i] = gekko_op_illegal;
     for (int i = 0; i < 32; i++)
         gekko_op_59[i] = gekko_op_63a[i] = gekko_op_illegal;
+    gekko_op_primary[GEKKO_HLE_OPCODE] = op_hle;
     gekko_op_primary[4] = op_4;
     gekko_op_primary[19] = op_19;
     gekko_op_primary[31] = op_31;

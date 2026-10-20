@@ -10,7 +10,8 @@ Requisitos: Linux (o Ubuntu en WSL) con el toolchain `nightly-2026-10-12` de ps3
 
 ```bash
 make                 # app de PS3 (build/ps3/gc-ps3.self) y runner de PC
-make test            # pruebas unitarias en PC con ASan + UBSan
+make test            # pruebas unitarias en PC con ASan + UBSan (incluye los DOLs de tests/dol)
+build/host/gc-ps3-runner tests/dol/bin/cpu.dol   # corre un DOL en el intérprete (--help)
 make phase0          # pruebas de la Fase 0 para consola o RPCS3 (build/phase0/*.self)
 make logrecv         # recibe el log UDP de la consola (en Windows: tools\logrecv.cmd)
 make pkg             # paquete instalable (build/ps3/gc-ps3.pkg)
@@ -34,6 +35,7 @@ src/platform/host/   runner en PC
 include/backend/     interfaces propias (gfx_backend.h, spu_jobs.h)
 lib/                 librerías de terceros fijadas a un commit (ver lib/VERSIONS.md)
 tests/unit/          pruebas unitarias del núcleo (PC)
+tests/dol/           DOLs de prueba propios (sin libc) y su salida esperada
 tests/phase0/        pruebas de la Fase 0 en consola
 docker/              imagen de build (la misma en la PC y en CI)
 tools/               toolchain fijado y scripts

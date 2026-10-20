@@ -1,0 +1,17 @@
+hola desde gc-ps3
+enteros: -42 7 4000000000 beef CAFE 10 ok
+anchos: [   42] [42   ] [00042] [+42] [ 42] [0xff] [010]
+cadenas: [uno] [     dos] [tres    ] [ab] []
+cortos: 4464 4464 44 44
+largos: -1234567890123 18446744073709551615 123456789abcdef 5
+flotantes: 3.141593 0.667 1.234568e+05 0.0001234 1E+20    -1.5000 6.02e+23  |
+simple: 1.100000 0.333333
+asteriscos: [    12] [12    ] [2.72]
+por ciento: 100%
+pila: 1 2 3 4 5 6 7 8 9 10
+pila double: 1 2 3 4 5 6 7 8 9 10
+mezcla: 1 2 3 4 5.5 6 7 8.5
+pares al final: 1 2 3 4 5 6 77 8
+va_list: ok 1 2 3.25 4 5 6 7 8 9 10
+puts: una linea
+sin salto al final (sigue la linea)
