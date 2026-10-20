@@ -18,7 +18,8 @@
  */
 
 /*
- * La GameCube armada: memoria, CPU y planificador, y el arranque por HLE.
+ * La GameCube armada: memoria, CPU, planificador, el hardware de src/hw y el
+ * arranque por HLE.
  *
  * gc_system_boot_dol deja la máquina como la deja el IPL antes de saltar a
  * un ejecutable, con los valores que usa Dolphin para arrancar un DOL
@@ -35,6 +36,8 @@
 #include "core/mem.h"
 #include "core/sched.h"
 #include "cpu/gekko.h"
+#include "hw/pi.h"
+#include "hw/vi.h"
 
 #define GC_CPU_CLOCK   486000000u      /* Hz */
 #define GC_BUS_CLOCK   162000000u
@@ -51,6 +54,8 @@ typedef struct gc_system {
     gekko_t    cpu;
     gc_sched_t sched;
     gc_hle_t   hle;
+    gc_pi_t    pi;
+    gc_vi_t    vi;
 } gc_system_t;
 
 /* Reserva la memoria y deja la CPU recién encendida. 0, o -1 sin memoria. */

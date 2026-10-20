@@ -9,7 +9,7 @@ FP_CFLAGS   := -ffp-contract=off -frounding-math
 HOST_CFLAGS := -std=c11 -g -O1 -Wall -Wextra -Wpedantic -Werror $(FP_CFLAGS) -Isrc -Iinclude
 HOST_SAN    := -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all
 
-HOST_CORE_SRCS   := $(wildcard src/core/*.c src/cpu/*.c)
+HOST_CORE_SRCS   := $(wildcard src/core/*.c src/cpu/*.c src/hw/*.c)
 HOST_RUNNER_SRCS := $(wildcard src/platform/host/*.c) $(HOST_CORE_SRCS)
 HOST_TEST_SRCS   := $(wildcard tests/unit/*.c) $(HOST_CORE_SRCS)
 
@@ -38,7 +38,7 @@ BE_QEMU    ?= qemu-ppc64
 BE_CFLAGS  := -std=c11 -O1 -Wall -Wextra -Wpedantic -Werror $(FP_CFLAGS) -Isrc -Iinclude -mcpu=cell
 HOST_BE_TESTS := $(BUILD)/host-be/unit-tests
 
-$(HOST_BE_TESTS): $(HOST_TEST_SRCS) $(wildcard src/core/*.h src/cpu/*.h tests/unit/*.h)
+$(HOST_BE_TESTS): $(HOST_TEST_SRCS) $(wildcard src/core/*.h src/cpu/*.h src/hw/*.h tests/unit/*.h)
 	@mkdir -p $(dir $@)
 	$(BE_CC) $(BE_CFLAGS) $(HOST_TEST_SRCS) -static -lm -o $@
 

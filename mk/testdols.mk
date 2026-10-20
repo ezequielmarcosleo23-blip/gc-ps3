@@ -6,8 +6,8 @@
 # los regenera (no hace falta para `make test` ni en el CI).
 #
 #   tests/dol/bin/<prueba>.dol, .map   lo que corre el emulador
-#   tests/dol/esperado/<prueba>.txt    lo que tiene que imprimir; para hola y cpu
-#                                      sale de compilar el mismo programa en la PC
+#   tests/dol/esperado/<prueba>.txt    lo que tiene que imprimir; para hola, cpu y
+#                                      pantalla sale de compilar el mismo programa en la PC
 
 DOL_CC     ?= powerpc-linux-gnu-gcc
 DOL_CFLAGS := -std=c11 -mcpu=750 -mhard-float -O2 -ffreestanding -fno-builtin -fno-pic \
@@ -15,8 +15,9 @@ DOL_CFLAGS := -std=c11 -mcpu=750 -mhard-float -O2 -ffreestanding -fno-builtin -f
               -fno-tree-loop-distribute-patterns -ffp-contract=off -Wall -Wextra -Werror \
               -Wa,-m750cl -Itests/dol
 DOL_LDFLAGS := -nostdlib -static -T tests/dol/link.ld -Wl,--build-id=none
-TESTDOLS    := hola cpu timer
-TESTDOLS_HOSTED := hola cpu                # los que también compilan en la PC
+TESTDOLS    := hola cpu timer pantalla contador
+TESTDOLS_HOSTED := hola cpu pantalla       # los que también compilan en la PC
+DOL_VIDEO   := pantalla contador           # los que usan tests/dol/video.c
 
 DOL_OUT  := tests/dol/bin
 DOL_TMP  := $(BUILD)/testdols
@@ -28,7 +29,7 @@ dol-cc-check:
 	@command -v $(DOL_CC) >/dev/null 2>&1 || { \
 	  echo "Falta $(DOL_CC). En Ubuntu: sudo apt install -y gcc-powerpc-linux-gnu"; exit 1; }
 
-$(DOL_TMP)/%.o: tests/dol/%.c tests/dol/rt.h | dol-cc-check
+$(DOL_TMP)/%.o: tests/dol/%.c tests/dol/rt.h tests/dol/video.h | dol-cc-check
 	@mkdir -p $(dir $@)
 	$(DOL_CC) $(DOL_CFLAGS) -c $< -o $@
 
@@ -37,7 +38,9 @@ $(DOL_TMP)/crt0.o: tests/dol/crt0.S | dol-cc-check
 	$(DOL_CC) $(DOL_CFLAGS) -c $< -o $@
 
 $(DOL_TMP)/%.elf: $(DOL_RT) $(DOL_TMP)/%.o tests/dol/link.ld
-	$(DOL_CC) $(DOL_LDFLAGS) $(DOL_RT) $(DOL_TMP)/$*.o -lgcc -o $@
+	$(DOL_CC) $(DOL_LDFLAGS) $(filter %.o,$^) -lgcc -o $@
+
+$(DOL_VIDEO:%=$(DOL_TMP)/%.elf): $(DOL_TMP)/video.o
 
 $(DOL_OUT)/%.dol: $(DOL_TMP)/%.elf tools/elf2dol.py
 	@mkdir -p $(dir $@)
@@ -46,7 +49,9 @@ $(DOL_OUT)/%.dol: $(DOL_TMP)/%.elf tools/elf2dol.py
 # La misma prueba compilada para la PC: su salida es la esperada del DOL
 $(DOL_TMP)/host/%: tests/dol/%.c tests/dol/rt_host.c tests/dol/rt.h
 	@mkdir -p $(dir $@)
-	$(HOST_CC) -std=c11 -O2 -ffp-contract=off -Wall -Wextra -Werror -DGCPS3_HOST -Itests/dol $< tests/dol/rt_host.c -o $@
+	$(HOST_CC) -std=c11 -O2 -ffp-contract=off -Wall -Wextra -Werror -DGCPS3_HOST -Itests/dol $(filter %.c,$^) -o $@
+
+$(DOL_TMP)/host/pantalla: tests/dol/video.c tests/dol/video.h
 
 tests/dol/esperado/%.txt: $(DOL_TMP)/host/%
 	@mkdir -p $(dir $@)

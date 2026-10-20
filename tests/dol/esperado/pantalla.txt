@@ -1,0 +1,3 @@
+pantalla: VI en 480i NTSC, 640x480, XFB en 0x00200000
+pantalla: crc32 del XFB 0x55110b73
+pantalla: listo, la imagen queda en pantalla

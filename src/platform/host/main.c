@@ -224,6 +224,13 @@ int main(int argc, char **argv)
     fprintf(stderr, "runner: %llu ciclos en %.2f s (%.1f MIPS), pc = 0x%08x, %u instrucciones ilegales\n",
             (unsigned long long)ran, secs, secs > 0 ? (double)ran / secs / 1e6 : 0.0,
             (unsigned)sys.cpu.pc, (unsigned)sys.cpu.illegal);
+    if (sys.vi.last.xfb)
+        fprintf(stderr, "runner: %llu campos de video, el ultimo de %ux%u con el XFB en 0x%08x\n",
+                (unsigned long long)sys.vi.fields, (unsigned)sys.vi.last.width,
+                (unsigned)sys.vi.last.height, (unsigned)sys.vi.last.xfb);
+    else
+        fprintf(stderr, "runner: %llu campos de video, ninguno con XFB\n",
+                (unsigned long long)sys.vi.fields);
     const int code = sys.hle.exited ? (int)(sys.hle.exit_code & 0xFFu) : 0;
     if (sys.hle.exited)
         fprintf(stderr, "runner: el programa termino con exit(%d)\n", (int)sys.hle.exit_code);

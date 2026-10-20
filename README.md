@@ -27,6 +27,7 @@ make docker-make     # compila todo dentro de la imagen Docker, igual que el CI
 ```
 src/core/            memoria, MMIO, scheduler, DVD, arranque HLE (portable)
 src/cpu/             intérprete de Gekko (el JIT después)
+src/hw/              hardware alrededor de la CPU: PI, VI (portable)
 src/gx/              Command Processor, BP/XF/TEV (portable)
 src/dsp/             HLE de AX
 src/spu/             programas SPE (cada carpeta es un programa)

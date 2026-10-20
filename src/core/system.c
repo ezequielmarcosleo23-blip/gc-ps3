@@ -58,6 +58,9 @@ int gc_system_init(gc_system_t *s)
     s->cpu.hle_ctx = s;
     gc_sched_init(&s->sched);
     gc_hle_reset(&s->hle);
+    gc_pi_init(&s->pi, s);
+    gc_vi_init(&s->vi, s);
+    gc_vi_reset(&s->vi, 0);
     return 0;
 }
 
@@ -77,6 +80,8 @@ void gc_system_hle_boot(gc_system_t *s, const gc_boot_config_t *cfg, uint32_t en
     c->hle_ctx = s;
     gc_sched_init(&s->sched);
     gc_hle_reset(&s->hle);
+    gc_pi_reset(&s->pi);
+    gc_vi_reset(&s->vi, cfg && cfg->pal);
 
     c->msr = MSR_FP | MSR_IR | MSR_DR | MSR_RI;           /* 0x2032 */
     c->spr[SPR_HID0] = 0x0011C464u;                        /* cachés, BHT, BTIC... */

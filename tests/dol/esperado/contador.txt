@@ -1,0 +1,3 @@
+contador: VI en 480i NTSC, DI0 y DI1 una vez por campo
+contador: 9 interrupciones de video
+contador: periodo 675675 ticks, 59.94 campos por segundo: OK

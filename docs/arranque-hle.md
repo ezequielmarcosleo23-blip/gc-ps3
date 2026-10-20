@@ -42,11 +42,15 @@ Los BAT se guardan para quien los lea; la memoria emulada no traduce direcciones
 
 En los vectores de excepción `0x100`, `0x200`, `0x300`, `0x400`, `0x500`, `0x600`, `0x700`, `0x800`, `0x900`, `0xC00`, `0xD00`, `0xF00`, `0x1300`, `0x1400` y `0x1700` queda un `rfi`: una excepción antes de que el programa instale sus manejadores vuelve sin romper nada.
 
+## Hardware
+
+El PI y la VI quedan con los valores de encendido de Dolphin ([src/hw](../src/hw/README.md)): en el PI, la causa VI prendida y la máscara en cero; la VI con los tiempos de `Preset` (NTSC a 54 MHz o PAL a 27 MHz según `--pal`) y la primera media línea agendada.
+
 ## Después del arranque
 
 Si hay un `.map` (el runner busca el que está al lado del DOL), se enganchan las funciones de depuración conocidas (`src/core/hle_os.c`): lo que imprimen va al log y `exit` detiene la CPU (D-033).
 
 ## Pendiente para etapas siguientes
 
-- El reloj de tiempo real del chip IPL (EXI) y el resto del hardware: etapa D.
+- El reloj de tiempo real del chip IPL (EXI), SI y los stubs: etapa D2.
 - Variables que solo pone el apploader de un disco (ID del juego en `0x80000000`, FST, arena): cuando se arranquen ISOs, fuera de la Fase 1.
