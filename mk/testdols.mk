@@ -23,6 +23,12 @@ DOL_OUT  := tests/dol/bin
 DOL_TMP  := $(BUILD)/testdols
 DOL_RT   := $(DOL_TMP)/crt0.o $(DOL_TMP)/rt.o
 
+# Las reglas que compilan los DOLs solo existen con `make testdols`. En los demás
+# objetivos los .dol, .map y .txt versionados son archivos fuente: la app de PS3
+# y el .pkg los copian, y en un checkout nuevo (el CI) no hay .elf intermedios
+# ni compilador cruzado para rehacerlos.
+ifneq ($(filter testdols,$(MAKECMDGOALS)),)
+
 # Antes de compilar: el compilador cruzado tiene que estar instalado
 .PHONY: dol-cc-check
 dol-cc-check:
@@ -56,3 +62,5 @@ $(DOL_TMP)/host/pantalla: tests/dol/video.c tests/dol/video.h
 tests/dol/esperado/%.txt: $(DOL_TMP)/host/%
 	@mkdir -p $(dir $@)
 	$< > $@
+
+endif
