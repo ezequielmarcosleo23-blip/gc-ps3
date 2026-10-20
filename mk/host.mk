@@ -49,6 +49,11 @@ ORACLE_QEMU ?= qemu-ppc -cpu 750cxe
 ORACLE_SRCS := $(wildcard tools/ppc-oracle/oracle_*.c)
 ORACLE_BINS := $(ORACLE_SRCS:tools/ppc-oracle/%.c=$(BUILD)/oracle/%)
 
-$(BUILD)/oracle/%: tools/ppc-oracle/%.c
+.PHONY: oracle-cc-check
+oracle-cc-check:
+	@command -v $(ORACLE_CC) >/dev/null 2>&1 || { \
+	  echo "Falta $(ORACLE_CC). En Ubuntu: sudo apt install -y gcc-powerpc-linux-gnu qemu-user"; exit 1; }
+
+$(BUILD)/oracle/%: tools/ppc-oracle/%.c | oracle-cc-check
 	@mkdir -p $(dir $@)
 	$(ORACLE_CC) -static -O1 -mcpu=750 -Wall -Wextra -o $@ $<

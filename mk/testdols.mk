@@ -22,11 +22,17 @@ DOL_OUT  := tests/dol/bin
 DOL_TMP  := $(BUILD)/testdols
 DOL_RT   := $(DOL_TMP)/crt0.o $(DOL_TMP)/rt.o
 
-$(DOL_TMP)/%.o: tests/dol/%.c tests/dol/rt.h
+# Antes de compilar: el compilador cruzado tiene que estar instalado
+.PHONY: dol-cc-check
+dol-cc-check:
+	@command -v $(DOL_CC) >/dev/null 2>&1 || { \
+	  echo "Falta $(DOL_CC). En Ubuntu: sudo apt install -y gcc-powerpc-linux-gnu"; exit 1; }
+
+$(DOL_TMP)/%.o: tests/dol/%.c tests/dol/rt.h | dol-cc-check
 	@mkdir -p $(dir $@)
 	$(DOL_CC) $(DOL_CFLAGS) -c $< -o $@
 
-$(DOL_TMP)/crt0.o: tests/dol/crt0.S
+$(DOL_TMP)/crt0.o: tests/dol/crt0.S | dol-cc-check
 	@mkdir -p $(dir $@)
 	$(DOL_CC) $(DOL_CFLAGS) -c $< -o $@
 
