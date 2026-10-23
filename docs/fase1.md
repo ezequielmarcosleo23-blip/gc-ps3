@@ -27,7 +27,7 @@
 
 ## Fuera de la Fase 1
 
-Gráficos GX en el RSX, audio y DSP, lectura de ISOs de juegos y el JIT. Orden propuesto para después: GX, audio, JIT; se decide al cerrar esta fase.
+Gráficos GX en el RSX, audio y DSP, lectura de ISOs de juegos y el JIT. Lo siguiente es GX: [fase2.md](fase2.md).
 
 ## Reportes
 
