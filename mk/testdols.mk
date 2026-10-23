@@ -18,6 +18,8 @@ DOL_LDFLAGS := -nostdlib -static -T tests/dol/link.ld -Wl,--build-id=none
 TESTDOLS    := hola cpu timer pantalla contador hw
 TESTDOLS_HOSTED := hola cpu pantalla       # los que también compilan en la PC
 DOL_VIDEO   := pantalla contador           # los que usan tests/dol/video.c
+TESTDOLS_EXIT := hola cpu timer hw         # terminan con exit(0)
+TESTDOLS_STAY := pantalla contador         # se quedan mostrando algo
 
 DOL_OUT  := tests/dol/bin
 DOL_TMP  := $(BUILD)/testdols

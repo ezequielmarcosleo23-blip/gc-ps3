@@ -142,11 +142,20 @@ typedef struct gekko {
     uint32_t  spr[1024];       /* el resto de los SPR, por número */
     uint32_t  pc, npc;
 
-    uint64_t  cycles;          /* instrucciones ejecutadas */
-    uint64_t  tb;              /* timebase */
-    uint32_t  tb_frac;         /* ciclos hacia el siguiente tick */
-    uint32_t  dec;             /* decrementador */
-    int       dec_pending;     /* el decrementador pasó por cero */
+    uint64_t  cycles;          /* ciclos: 1 por instrucción */
+
+    /* Timebase y decrementador como en Dolphin (SystemTimers): cuentan desde el
+     * ciclo en que se escribieron, 1 tick cada 12 ciclos. tb y dec guardan el
+     * último valor leído o escrito (los SPR de Dolphin); el actual lo dan
+     * gekko_tb() y mfspr. */
+    uint64_t  tb;
+    uint64_t  tb_start_value, tb_start_cycles;
+    uint32_t  dec;
+    uint32_t  dec_start_value;
+    uint64_t  dec_start_cycles;
+    uint64_t  dec_when;        /* ciclo en que llega a -1 (si dec_armed) */
+    int       dec_armed;
+    int       dec_pending;     /* excepción del decrementador pendiente */
     int       external;        /* línea de interrupción externa (PI) */
 
     uint32_t  reserve_addr;    /* lwarx / stwcx. */
@@ -192,6 +201,12 @@ void gekko_exception(gekko_t *c, uint32_t vector, uint32_t srr0, uint32_t srr1_b
  * gekko_reset, gekko_run y las instrucciones que escriben FPSCR; quien cambie
  * c->fpscr por fuera (pruebas, estados guardados) lo llama después. */
 void gekko_fpu_sync(const gekko_t *c);
+
+/* El timebase ahora */
+uint64_t gekko_tb(const gekko_t *c);
+
+/* Pone el timebase en value desde este ciclo */
+void gekko_set_tb(gekko_t *c, uint64_t value);
 
 /* mfspr / mtspr con sus efectos (DEC, timebase, DMA de la caché bloqueada). */
 uint32_t gekko_get_spr(gekko_t *c, uint32_t spr);

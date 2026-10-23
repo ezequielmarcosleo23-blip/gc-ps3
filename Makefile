@@ -8,6 +8,8 @@
 #   make test-app   corre la app de PS3 en la PC con un guion y la compara con el runner
 #   make oracle     regenera las tablas del oráculo de Gekko (PowerPC 750CXe en QEMU)
 #   make testdols   recompila los DOLs de prueba (tests/dol) y sus salidas esperadas
+#   make dolphin    compila Dolphin con el parche de traza (docs/traza-dolphin.md)
+#   make dolphin-ref  compara los DOLs con Dolphin y regenera tests/dol/dolphin
 #   make phase0     compila las pruebas de la Fase 0 (build/phase0/<prueba>.self)
 #   make logrecv    escucha el log UDP de la consola o de RPCS3 (Ctrl+C para salir)
 #   make pkg        genera el .pkg instalable
@@ -29,7 +31,7 @@ include mk/ps3.mk
 include mk/host.mk
 include mk/testdols.mk
 
-.PHONY: all ps3 phase0 pkg host test test-be test-app oracle testdols run run-test logrecv clean toolchain-check docker-image docker-make help
+.PHONY: all ps3 phase0 pkg host test test-be test-app oracle testdols dolphin dolphin-ref run run-test logrecv clean toolchain-check docker-image docker-make help
 
 all: ps3 phase0 host
 
@@ -49,6 +51,7 @@ test: $(HOST_TESTS) $(HOST_RUNNER) $(APPSIM)
 	python3 tools/mkiso.py --selftest
 	python3 tools/elf2dol.py --selftest
 	python3 tools/compare_log.py --selftest --runner $(HOST_RUNNER)
+	python3 tools/trace_diff.py --selftest
 	python3 tests/appsim/run.py $(APPSIM) --runner $(HOST_RUNNER)
 
 # Solo la app de PS3 simulada en la PC (también la corre make test)
@@ -56,8 +59,9 @@ test-app: $(APPSIM) $(HOST_RUNNER)
 	python3 tests/appsim/run.py $(APPSIM) --runner $(HOST_RUNNER)
 
 # Pruebas unitarias en big-endian con QEMU (necesita gcc-powerpc64-linux-gnu y qemu-user)
+# (en QEMU es lento: contra Dolphin, solo los primeros 2 millones de instrucciones)
 test-be: $(HOST_BE_TESTS)
-	$(BE_QEMU) $(HOST_BE_TESTS)
+	GCPS3_REF_MAX=2000000 $(BE_QEMU) $(HOST_BE_TESTS)
 
 # Regenera las tablas del oráculo (tools/ppc-oracle) en tests/unit/data/
 oracle: $(ORACLE_BINS)
@@ -66,6 +70,19 @@ oracle: $(ORACLE_BINS)
 
 # Recompila los DOLs de prueba (necesita gcc-powerpc-linux-gnu; ver mk/testdols.mk)
 testdols: $(TESTDOLS:%=$(DOL_OUT)/%.dol) $(TESTDOLS_HOSTED:%=tests/dol/esperado/%.txt)
+
+# Dolphin con el parche de traza y las referencias de tests/dol/dolphin (docs/traza-dolphin.md)
+DOLPHIN_DIR ?= $(BUILD)/dolphin
+DOLPHIN     ?= $(DOLPHIN_DIR)/build/Binaries/dolphin-emu-nogui
+DOLPHIN_CMP  = python3 tools/dolphin-trace/comparar.py --dolphin $(DOLPHIN) --runner $(HOST_RUNNER) \
+               --trabajo $(DOLPHIN_DIR)/trazas --referencia tests/dol/dolphin
+
+dolphin:
+	tools/dolphin-trace/build.sh $(DOLPHIN_DIR)
+
+dolphin-ref: $(HOST_RUNNER)
+	$(DOLPHIN_CMP) $(TESTDOLS_EXIT:%=tests/dol/bin/%.dol)
+	$(DOLPHIN_CMP) --instrucciones 30000000 $(TESTDOLS_STAY:%=tests/dol/bin/%.dol)
 
 run: $(PS3_SELF)
 	@if [ -z "$(PS3LOAD)" ]; then echo "Falta PS3LOAD, por ejemplo: make run PS3LOAD=tcp:192.168.1.50"; exit 1; fi
@@ -111,4 +128,4 @@ docker-make: docker-image
 		make -j$$(nproc) BUILD=build-docker all test test-be pkg
 
 help:
-	@sed -n '3,17p' Makefile | sed 's/^# \{0,1\}//'
+	@sed -n '3,19p' Makefile | sed 's/^# \{0,1\}//'

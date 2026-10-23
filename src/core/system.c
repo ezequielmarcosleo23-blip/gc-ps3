@@ -126,10 +126,24 @@ void gc_system_hle_boot(gc_system_t *s, const gc_boot_config_t *cfg, uint32_t en
     gc_write32(m, LOW_BUS_CLOCK, GC_BUS_CLOCK);
     gc_write32(m, LOW_CPU_CLOCK, GC_CPU_CLOCK);
     gc_write64(m, LOW_SYSTEM_TIME, (cfg ? cfg->rtc : 0) * (uint64_t)GC_TB_CLOCK);
+    /* El timebase cuenta desde la misma hora, en ticks desde el 2000 y desde
+     * el ciclo 0 (Dolphin, SystemTimers::Init; se vio en la traza de
+     * timer.dol). El valor guardado sigue en 0 hasta la primera lectura. */
+    c->tb = 0;
+    c->tb_start_value = (cfg ? cfg->rtc : 0) * (uint64_t)GC_TB_CLOCK;
+    c->tb_start_cycles = 0;
 
-    /* DEC con el bit 0 ya en 1: no hay un decrementador pendiente del arranque
-     * (como en Dolphin, que no lo dispara hasta que el programa escribe DEC). */
+    /* DEC con el bit de arriba en 1: no baja ni hay excepción hasta que el
+     * programa lo escriba (como en Dolphin). */
     c->dec = 0xFFFFFFFFu;
+    c->dec_armed = c->dec_pending = 0;
+
+    /* Dolphin no ejecuta la primera instrucción en el ciclo 0: su primer
+     * CoreTiming::Advance cierra un tramo de arranque de 20 000 ciclos
+     * (MAX_SLICE_LENGTH) en el que solo corren los eventos del hardware. El
+     * DOL empieza en ese mismo ciclo, así el timebase, el decrementador y la VI
+     * van igual que en Dolphin (se vio en las trazas de timer.dol y hw.dol). */
+    c->cycles = GC_BOOT_CYCLES;
 
     c->pc = entry;
     gekko_fpu_sync(c);

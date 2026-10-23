@@ -14,6 +14,7 @@ Intérprete de Gekko (Fase 1, etapa B). El mismo código corre en la PC y en el 
 | `fpu_util.h/.c` | Aritmética del Gekko portada de Dolphin: NaN y FPSCR, Force25Bit, fmadd de simple con un solo redondeo, conversiones de lfs/stfs/psq, tablas de fres y frsqrte, modo de redondeo de la máquina |
 | `interp_fpu.c` | FPU escalar (opcodes 59 y 63), `fctiw`, comparaciones, FPSCR (`mffs`, `mtfsf`...), `lfs`/`lfd`/`stfs`/`stfd`/`stfiwx` |
 | `interp_ps.c` | Paired singles (opcode 4) y `psq_l`/`psq_st` con GQR (float, u8, s8, u16, s16) |
+| `huella.h/.c` | Huella del estado de la CPU para comparar con Dolphin instrucción por instrucción ([traza-dolphin](../../docs/traza-dolphin.md)) |
 
 ## Cómo se verifica
 
@@ -21,12 +22,13 @@ Intérprete de Gekko (Fase 1, etapa B). El mismo código corre en la PC y en el 
 - **Oráculo de la FPU:** `tools/ppc-oracle/oracle_fpu.c` hace lo mismo con la FPU escalar: 21 326 casos en `oracle_fpu.bin` (los 4 modos de redondeo, NaN, subnormales, bordes de simple y de enteros, empates de fmadds, cargas y almacenamientos, instrucciones de FPSCR). `test_cpu_fpu.c` compara f1, FPSCR y CR; cada fila marca los bits que no se comparan (ver la cabecera de `oracle_fpu.c`).
 - **Paired singles** (`test_cpu_ps.c`): el 750CXe no los tiene; cada mitad se compara con la escalar de simple equivalente en los 4 modos, y la cuantización, las mezclas y HID2 van a mano.
 - **Programas cortos a mano** (`tests/unit/test_cpu.c`): saltos, memoria, reservas, cadenas, caché bloqueada, SPR, excepciones, decrementador e interrupción externa.
+- **Dolphin, instrucción por instrucción** (`tests/unit/test_dolphin.c`): los 6 DOLs de `tests/dol` dan la misma huella del estado antes de cada instrucción que Dolphin cf5cb7ef en modo paso a paso ([traza-dolphin](../../docs/traza-dolphin.md), D-039).
 - Todo corre en x86-64 con ASan/UBSan y en big-endian con `make test-be`.
 - `fpu_util.c` se comparó una vez contra el código de Dolphin compilado aparte (28,8 millones de operaciones al azar en los 4 modos): mismos bits salvo los dos casos de D-030.
 
 ## Decisiones de semántica
 
-- Cada instrucción cuenta 1 ciclo; el timebase avanza 1 cada 12 ciclos y el decrementador con él.
+- Cada instrucción cuenta 1 ciclo. El timebase y el decrementador siguen a Dolphin (D-040): 1 tick cada 12 ciclos contado desde que se escribieron; el decrementador llega a -1 a los dec × 12 ciclos, queda en 0xFFFFFFFF y pide la excepción.
 - `divw` y `divwu` con resultado indefinido (divisor 0, `0x80000000 / -1`): 0xFFFFFFFF si el dividendo es negativo y 0 si no, como Dolphin.
 - Las operaciones de caché (`dcbf`, `dcbst`, `dcbi`, `icbi`...) no hacen nada en el intérprete; `dcbz` y `dcbz_l` sí ponen a cero.
 - Sin comprobación de privilegios: los juegos corren en modo supervisor.

@@ -131,6 +131,7 @@ void gekko_reset(gekko_t *c, gc_mem_t *mem)
     c->spr[SPR_ECID_U] = 0x0D96E200u;       /* identificador del chip: el de Dolphin */
     c->spr[SPR_ECID_M] = 0x1840C00Du;
     c->spr[SPR_ECID_L] = 0x82BB08E8u;
+    c->dec = 0xFFFFFFFFu;                   /* sin bajar hasta que se escriba (Dolphin) */
     gekko_fpu_sync(c);
 }
 
@@ -153,22 +154,45 @@ void gekko_set_external(gekko_t *c, int level)
 
 /* ---- timebase y decrementador --------------------------------------------- */
 
+/* El modelo de Dolphin (SystemTimers::DecrementerSet y DecrementerCallback):
+ * con el bit de arriba en 0, DEC baja desde el valor escrito y llega a -1
+ * dec × 12 ciclos después; ahí queda en 0xFFFFFFFF (no sigue bajando) y pide
+ * la excepción. Escribirlo con el bit de arriba pasando de 0 a 1 la pide en
+ * el acto. */
 static void dec_write(gekko_t *c, uint32_t v)
 {
     if (!(c->dec & 0x80000000u) && (v & 0x80000000u))
         c->dec_pending = 1;
     c->dec = v;
+    c->dec_armed = 0;
+    if (!(v & 0x80000000u)) {
+        c->dec_start_value = v;
+        c->dec_start_cycles = c->cycles;
+        c->dec_when = c->cycles + (uint64_t)v * GEKKO_TB_DIVIDER;
+        c->dec_armed = 1;
+    }
 }
 
 static inline void advance(gekko_t *c, uint32_t cycles)
 {
     c->cycles += cycles;
-    c->tb_frac += cycles;
-    while (c->tb_frac >= GEKKO_TB_DIVIDER) {
-        c->tb_frac -= GEKKO_TB_DIVIDER;
-        c->tb++;
-        dec_write(c, c->dec - 1);
+    if (c->dec_armed && c->cycles >= c->dec_when) {
+        c->dec_armed = 0;
+        c->dec = 0xFFFFFFFFu;
+        c->dec_pending = 1;
     }
+}
+
+uint64_t gekko_tb(const gekko_t *c)
+{
+    return c->tb_start_value + (c->cycles - c->tb_start_cycles) / GEKKO_TB_DIVIDER;
+}
+
+void gekko_set_tb(gekko_t *c, uint64_t value)
+{
+    c->tb = value;
+    c->tb_start_value = value;
+    c->tb_start_cycles = c->cycles;
 }
 
 /* ---- SPR -------------------------------------------------------------------- */
@@ -201,9 +225,13 @@ uint32_t gekko_get_spr(gekko_t *c, uint32_t spr)
     case SPR_XER:   return c->xer;
     case SPR_LR:    return c->lr;
     case SPR_CTR:   return c->ctr;
-    case SPR_DEC:   return c->dec;
-    case SPR_TBL_R: return (uint32_t)c->tb;
-    case SPR_TBU_R: return (uint32_t)(c->tb >> 32);
+    case SPR_DEC:
+        if (!(c->dec & 0x80000000u))         /* todavía bajando */
+            c->dec = c->dec_start_value -
+                     (uint32_t)((c->cycles - c->dec_start_cycles) / GEKKO_TB_DIVIDER);
+        return c->dec;
+    case SPR_TBL_R: c->tb = gekko_tb(c); return (uint32_t)c->tb;
+    case SPR_TBU_R: c->tb = gekko_tb(c); return (uint32_t)(c->tb >> 32);
     case SPR_PVR:   return GEKKO_PVR;
     default:        return c->spr[spr & 1023];
     }
@@ -216,8 +244,9 @@ void gekko_set_spr(gekko_t *c, uint32_t spr, uint32_t v)
     case SPR_LR:    c->lr = v; return;
     case SPR_CTR:   c->ctr = v; return;
     case SPR_DEC:   dec_write(c, v); return;
-    case SPR_TBL_W: c->tb = (c->tb & 0xFFFFFFFF00000000ull) | v; return;
-    case SPR_TBU_W: c->tb = (c->tb & 0xFFFFFFFFull) | ((uint64_t)v << 32); return;
+    /* Como Dolphin: la otra mitad es la del último valor guardado */
+    case SPR_TBL_W: gekko_set_tb(c, (c->tb & 0xFFFFFFFF00000000ull) | v); return;
+    case SPR_TBU_W: gekko_set_tb(c, (c->tb & 0xFFFFFFFFull) | ((uint64_t)v << 32)); return;
     case SPR_PVR:   return;                 /* solo lectura */
     case SPR_DMAL:
         c->spr[SPR_DMAL] = v & ~2u;          /* T vuelve a 0: la copia es instantánea */

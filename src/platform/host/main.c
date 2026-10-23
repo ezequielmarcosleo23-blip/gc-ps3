@@ -17,6 +17,12 @@
  *     --cuadros        cada cuadro distinto que muestra la VI (al terminar un
  *                      campo): número, campo, tamaño y CRC-32 de sus bytes RGB.
  *                      Es la misma lista que da la app de PS3 (tools/compare_log.py)
+ *     --huella ARCHIVO pc, instrucción y huella del estado de la CPU antes de
+ *                      cada instrucción, en binario (16 bytes por instrucción;
+ *                      docs/traza-dolphin.md). Lo mismo que el Dolphin parchado
+ *     --detalle D:H    con --huella: el estado completo de las instrucciones
+ *                      D a H-1 en ARCHIVO.detalle
+ *     --puntos ARCHIVO la huella encadenada cada 65 536 instrucciones y al final
  *
  * Lo que el programa imprime (OSReport, printf...) sale por la salida estándar;
  * los mensajes del emulador, por la de error. Sale con el código de exit() del
@@ -35,6 +41,7 @@
 #include "core/system.h"
 #include "core/version.h"
 #include "core/xfb.h"
+#include "cpu/huella.h"
 
 #define DEFAULT_CYCLES GC_CPU_CLOCK
 #define MAX_FILE       (32u << 20)
@@ -50,6 +57,9 @@ static void usage(FILE *out, const char *argv0)
             "  --rtc SEGUNDOS   reloj al arrancar, segundos desde el 2000-01-01\n"
             "  --imagen ARCHIVO el ultimo cuadro de la VI en PNG\n"
             "  --cuadros        cada cuadro distinto de la VI con su CRC\n"
+            "  --huella ARCHIVO pc, instruccion y huella del estado de cada paso (binario)\n"
+            "  --detalle D:H    con --huella: estado completo de los pasos D a H-1\n"
+            "  --puntos ARCHIVO huella encadenada cada 65536 pasos y al final\n"
             "  --version, --help\n",
             argv0, (unsigned)DEFAULT_CYCLES);
 }
@@ -74,11 +84,63 @@ static uint8_t *read_file(const char *path, size_t *len)
 static gc_system_t sys;
 static FILE *trace_file;
 
+/* --huella, --detalle y --puntos (docs/traza-dolphin.md) */
+#define PUNTOS_CADA 65536u
+
+typedef struct huella_out {
+    FILE     *huella, *detalle, *puntos;
+    uint64_t  desde, hasta;               /* --detalle */
+    uint64_t  n;                          /* instrucciones vistas */
+    uint64_t  cadena;
+    uint32_t  last_pc;
+} huella_out_t;
+
+static huella_out_t hout;
+
+static void put_le(uint8_t *p, uint64_t v, int bytes)
+{
+    for (int k = 0; k < bytes; k++)
+        p[k] = (uint8_t)(v >> (8 * k));
+}
+
+static void huella_step(uint32_t pc, uint32_t inst)
+{
+    const uint64_t estado = gekko_huella(&sys.cpu);
+    if (hout.huella) {
+        uint8_t rec[16];
+        put_le(rec, pc, 4);
+        put_le(rec + 4, inst, 4);
+        put_le(rec + 8, estado, 8);
+        fwrite(rec, 1, sizeof rec, hout.huella);
+    }
+    if (hout.detalle && hout.n >= hout.desde && hout.n < hout.hasta) {
+        uint64_t w[GEKKO_ESTADO_PALABRAS];
+        uint8_t rec[16 + 8 * GEKKO_ESTADO_PALABRAS];
+        gekko_estado(&sys.cpu, w);
+        put_le(rec, hout.n, 8);
+        put_le(rec + 8, pc, 4);
+        put_le(rec + 12, inst, 4);
+        for (int k = 0; k < GEKKO_ESTADO_PALABRAS; k++)
+            put_le(rec + 16 + 8 * k, w[k], 8);
+        fwrite(rec, 1, sizeof rec, hout.detalle);
+    }
+    hout.cadena = gekko_huella_cadena(hout.cadena, pc, inst, estado);
+    hout.last_pc = pc;
+    hout.n++;
+    if (hout.puntos && hout.n % PUNTOS_CADA == 0)
+        fprintf(hout.puntos, "%llu %08x %016llx\n", (unsigned long long)hout.n, (unsigned)pc,
+                (unsigned long long)hout.cadena);
+}
+
 /* La traza muestra la instrucción original también donde hay un gancho. */
 static void trace_line(void *ctx, uint32_t pc, uint32_t inst)
 {
     (void)ctx;
-    fprintf(trace_file, "%08x %08x\n", (unsigned)pc, (unsigned)gc_hle_original(&sys, inst));
+    inst = gc_hle_original(&sys, inst);
+    if (trace_file)
+        fprintf(trace_file, "%08x %08x\n", (unsigned)pc, (unsigned)inst);
+    if (hout.huella || hout.puntos)
+        huella_step(pc, inst);
 }
 
 static void report_line(void *ctx, const char *line)
@@ -162,6 +224,7 @@ int main(int argc, char **argv)
 {
     uint64_t cycles = DEFAULT_CYCLES;
     const char *dol_path = NULL, *trace_path = NULL, *map_path = NULL, *image_path = NULL;
+    const char *huella_path = NULL, *puntos_path = NULL, *detalle = NULL;
     gc_boot_config_t cfg = { 0, 0 };
     int have_rtc = 0, list_frames = 0;
 
@@ -198,6 +261,18 @@ int main(int argc, char **argv)
             image_path = argv[i];
         } else if (strcmp(a, "--cuadros") == 0) {
             list_frames = 1;
+        } else if (strcmp(a, "--huella") == 0 || strcmp(a, "--puntos") == 0 ||
+                   strcmp(a, "--detalle") == 0) {
+            if (++i >= argc) {
+                fprintf(stderr, "%s necesita un argumento\n", a);
+                return 2;
+            }
+            if (a[2] == 'h')
+                huella_path = argv[i];
+            else if (a[2] == 'p')
+                puntos_path = argv[i];
+            else
+                detalle = argv[i];
         } else if (strcmp(a, "--pal") == 0) {
             cfg.pal = 1;
         } else if (strcmp(a, "--rtc") == 0) {
@@ -220,6 +295,15 @@ int main(int argc, char **argv)
     if (!dol_path) {
         usage(stderr, argv[0]);
         return 2;
+    }
+    if (detalle) {
+        char *colon;
+        hout.desde = strtoull(detalle, &colon, 0);
+        if (!huella_path || *colon != ':' || parse_u64(colon + 1, &hout.hasta) != 0 ||
+            hout.hasta <= hout.desde) {
+            fprintf(stderr, "--detalle necesita --huella y DESDE:HASTA con DESDE < HASTA\n");
+            return 2;
+        }
     }
     if (!have_rtc) {
         const time_t now = time(NULL);
@@ -280,6 +364,25 @@ int main(int argc, char **argv)
         setvbuf(trace_file, NULL, _IOFBF, 1u << 20);
         sys.cpu.trace = trace_line;
     }
+    if (huella_path || puntos_path) {
+        char det[1100];
+        snprintf(det, sizeof det, "%s.detalle", huella_path ? huella_path : "");
+        hout.huella = huella_path ? fopen(huella_path, "wb") : NULL;
+        hout.puntos = puntos_path ? fopen(puntos_path, "w") : NULL;
+        hout.detalle = detalle ? fopen(det, "wb") : NULL;
+        if ((huella_path && !hout.huella) || (puntos_path && !hout.puntos) ||
+            (detalle && !hout.detalle)) {
+            fprintf(stderr, "no se pudo crear la huella, los puntos o el detalle\n");
+            gc_system_free(&sys);
+            return 1;
+        }
+        if (hout.huella)
+            setvbuf(hout.huella, NULL, _IOFBF, 1u << 20);
+        if (hout.puntos)
+            fprintf(hout.puntos, "# gc-ps3 huella v%d runner, reloj %llu\n", GEKKO_HUELLA_VERSION,
+                    (unsigned long long)cfg.rtc);
+        sys.cpu.trace = trace_line;
+    }
 
     const clock_t t0 = clock();
     const uint64_t ran = gc_system_run(&sys, cycles);
@@ -288,6 +391,19 @@ int main(int argc, char **argv)
     gc_hle_flush(&sys);
     if (trace_file)
         fclose(trace_file);
+    if (hout.puntos && hout.n % PUNTOS_CADA != 0)
+        fprintf(hout.puntos, "%llu %08x %016llx\n", (unsigned long long)hout.n,
+                (unsigned)hout.last_pc, (unsigned long long)hout.cadena);
+    int huella_failed = 0;
+    FILE *outs[3] = { hout.huella, hout.detalle, hout.puntos };
+    for (int k = 0; k < 3; k++)
+        if (outs[k] && (ferror(outs[k]) | fclose(outs[k])) != 0)
+            huella_failed = 1;
+    if (huella_failed)
+        fprintf(stderr, "runner: no se pudo escribir la huella, los puntos o el detalle\n");
+    if (hout.huella || hout.puntos)
+        fprintf(stderr, "runner: huella de %llu instrucciones, cadena %016llx\n",
+                (unsigned long long)hout.n, (unsigned long long)hout.cadena);
     fprintf(stderr, "runner: %llu ciclos en %.2f s (%.1f MIPS), pc = 0x%08x, %u instrucciones ilegales\n",
             (unsigned long long)ran, secs, secs > 0 ? (double)ran / secs / 1e6 : 0.0,
             (unsigned)sys.cpu.pc, (unsigned)sys.cpu.illegal);
@@ -305,5 +421,5 @@ int main(int argc, char **argv)
     else
         fprintf(stderr, "runner: se acabaron los ciclos sin exit\n");
     gc_system_free(&sys);
-    return image_failed ? 1 : code;
+    return image_failed || huella_failed ? 1 : code;
 }

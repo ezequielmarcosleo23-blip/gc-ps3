@@ -41,6 +41,7 @@ static const test_case_t *const suites[] = {
     xfb_tests,
     hle_tests,
     program_tests,
+    dolphin_tests,
 };
 
 int main(void)

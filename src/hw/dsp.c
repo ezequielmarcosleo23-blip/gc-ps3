@@ -113,7 +113,7 @@ static uint16_t read_mail_lo(gc_dsp_t *dsp)
 
 static uint16_t read_csr(gc_dsp_t *dsp)
 {
-    if ((dsp->csr & DSP_CSR_INITCODE) && dsp->sys->cpu.tb >= dsp->initcode_clear_tb)
+    if ((dsp->csr & DSP_CSR_INITCODE) && gekko_tb(&dsp->sys->cpu) >= dsp->initcode_clear_tb)
         dsp->csr &= ~DSP_CSR_INITCODE;
     return dsp->csr;
 }
@@ -129,7 +129,7 @@ static void write_csr(gc_dsp_t *dsp, uint16_t v)
     if ((dsp->csr & DSP_CSR_INIT) && !(hle & DSP_CSR_INIT)) {
         set_ucode(dsp, UCODE_INIT);
         hle |= DSP_CSR_INITCODE;
-        dsp->initcode_clear_tb = dsp->sys->cpu.tb + INITCODE_TB;
+        dsp->initcode_clear_tb = gekko_tb(&dsp->sys->cpu) + INITCODE_TB;
     }
     if (v & DSP_CSR_RESET)
         dsp->audio_control = 0;

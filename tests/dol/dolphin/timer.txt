@@ -1,0 +1,8 @@
+# gc-ps3 huella v1: Dolphin cf5cb7ef paso a paso (tools/dolphin-trace)
+# dol timer.dol
+# reloj 845791192
+# instrucciones 240303
+65536 8000344c f62d2b9b0754a3e7
+131072 80003430 29583d2d7a544d02
+196608 80003448 8c8c8ea11db7b235
+240303 80003158 4fddac4b276d66ec

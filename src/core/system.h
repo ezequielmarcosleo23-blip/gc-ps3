@@ -49,6 +49,7 @@
 #define GC_CPU_CLOCK   486000000u      /* Hz */
 #define GC_BUS_CLOCK   162000000u
 #define GC_TB_CLOCK    (GC_CPU_CLOCK / GEKKO_TB_DIVIDER)    /* 40,5 MHz */
+#define GC_BOOT_CYCLES 20000u                               /* ciclo de la primera instrucción del DOL */
 #define GC_EPOCH_UNIX  946684800ull    /* 2000-01-01 00:00:00 UTC, en tiempo Unix */
 
 typedef struct gc_boot_config {

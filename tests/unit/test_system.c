@@ -79,7 +79,9 @@ static void test_boot_state(void)
     CHECK(c->spr[SPR_IBAT0U] == 0x80001FFFu && c->spr[SPR_IBAT0L] == 2);
     CHECK(c->spr[SPR_DBAT1U] == 0xC0001FFFu && c->spr[SPR_DBAT1L] == 0x2A);
     CHECK(c->spr[SPR_ECID_U] == 0x0D96E200u);
-    CHECK(c->dec == 0xFFFFFFFFu && !c->dec_pending);   /* sin decrementador pendiente */
+    CHECK(c->dec == 0xFFFFFFFFu && !c->dec_pending && !c->dec_armed);   /* sin decrementador */
+    CHECK(c->cycles == GC_BOOT_CYCLES);                 /* el tramo de arranque de Dolphin */
+    CHECK(gekko_tb(c) == 1000ull * 40500000ull + GC_BOOT_CYCLES / 12);
     CHECK(gc_read32(m, 0x80000900u) == 0x4C000064u && gc_read32(m, 0x80001700u) == 0x4C000064u);
     CHECK(gc_read32(m, 0x80000020u) == 0x0D15EA5Eu);
     CHECK(gc_read32(m, 0x80000028u) == 0x01800000u);
@@ -117,22 +119,24 @@ static void stop_cpu(void *ctx, uint64_t when, uint64_t late)
     ((gc_system_t *)ctx)->cpu.stop = 1;
 }
 
-/* Los eventos se atienden en su ciclo exacto; stop corta el tramo. */
+/* Los eventos se atienden en su ciclo exacto; stop corta el tramo. El DOL
+ * empieza en el ciclo GC_BOOT_CYCLES. */
 static void test_run_slices(void)
 {
+    const uint64_t b = GC_BOOT_CYCLES;
     CHECK(setup() == 0);
     boot(counter, 3);
     seen = 0;
-    CHECK(gc_sched_add(&sys.sched, 31, "r", record, &sys) == 0);
-    CHECK(gc_sched_add(&sys.sched, 31, "r", record, &sys) == 0);
-    CHECK(gc_sched_add(&sys.sched, 45, "r", record, &sys) == 0);
-    CHECK(gc_sched_add(&sys.sched, 60, "s", stop_cpu, &sys) == 0);
+    CHECK(gc_sched_add(&sys.sched, b + 31, "r", record, &sys) == 0);
+    CHECK(gc_sched_add(&sys.sched, b + 31, "r", record, &sys) == 0);
+    CHECK(gc_sched_add(&sys.sched, b + 45, "r", record, &sys) == 0);
+    CHECK(gc_sched_add(&sys.sched, b + 60, "s", stop_cpu, &sys) == 0);
 
     CHECK(gc_system_run(&sys, 1000) == 60);
-    CHECK(seen == 3 && seen_at[0] == 31 && seen_at[1] == 31 && seen_at[2] == 45);
+    CHECK(seen == 3 && seen_at[0] == b + 31 && seen_at[1] == b + 31 && seen_at[2] == b + 45);
     sys.cpu.stop = 0;
     CHECK(gc_system_run(&sys, 41) == 41);
-    CHECK(sys.cpu.cycles == 101);
+    CHECK(sys.cpu.cycles == b + 101);
     CHECK(sys.cpu.gpr[3] == 50 && sys.cpu.pc == TEXT0 + 4);
     teardown();
 }

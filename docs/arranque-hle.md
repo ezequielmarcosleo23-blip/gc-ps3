@@ -23,7 +23,9 @@ Cómo deja `gc_system_boot_dol` (`src/core/system.c`) la máquina antes de la pr
 | PVR | `0x00083214` | Gekko 2.4e, el de las consolas de venta |
 | ECID | `0x0D96E200`, `0x1840C00D`, `0x82BB08E8` | Identificador del chip (el de Dolphin) |
 | FPSCR | 0 | Redondeo al más cercano |
-| DEC | `0xFFFFFFFF` | Con el bit 0 en 1 no queda un decrementador pendiente del arranque; Dolphin tampoco lo dispara hasta que el programa escribe DEC |
+| DEC | `0xFFFFFFFF` | Con el bit de arriba en 1 no baja ni hay excepción hasta que el programa escribe DEC, como en Dolphin (D-040) |
+| Timebase | `--rtc` × 40 500 000 | Cuenta desde la hora del reloj y desde el ciclo 0, como Dolphin; el valor guardado de TBL/TBU es 0 hasta la primera lectura (D-040) |
+| Ciclo | 20 000 | La primera instrucción del DOL corre en el ciclo 20 000: antes solo corre el hardware (el primer tramo de CoreTiming de Dolphin, D-040) |
 
 Los BAT se guardan para quien los lea; la memoria emulada no traduce direcciones (D-008, D-026).
 

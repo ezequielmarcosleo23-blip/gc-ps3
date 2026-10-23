@@ -21,6 +21,7 @@ Programas de GameCube propios para probar el emulador de punta a punta, sin soft
 | `video.h`, `video.c` | VI en 480i NTSC, espera de cuadro, dibujo de a pares de píxeles en el XFB (YUV 4:2:2), fuente propia de 8x8 y CRC-32; en la PC el XFB es un arreglo |
 | `bin/*.dol`, `bin/*.map` | Lo compilado, versionado; el `.map` tiene el formato de Dolphin |
 | `esperado/*.txt` | Lo que cada prueba tiene que imprimir |
+| `dolphin/*.txt` | La huella de Dolphin cada 65 536 instrucciones ([traza-dolphin](../../docs/traza-dolphin.md)); `make dolphin-ref` las regenera |
 
 ## Cómo se usan
 
@@ -28,5 +29,6 @@ Programas de GameCube propios para probar el emulador de punta a punta, sin soft
 - A mano: `build/host/gc-ps3-runner tests/dol/bin/cpu.dol` (toma solo el `.map` de al lado). Para los que no terminan, `--ciclos 100000000`. Con `--imagen archivo.png` guarda el último cuadro; el de `pantalla` es igual píxel por píxel al de la versión de PC (`build/testdols/host/pantalla imagen.ppm`), CRC-32 de los bytes RGB `0x10589e8c`.
 - `make testdols` los vuelve a compilar con `powerpc-linux-gnu-gcc -mcpu=750 -Wa,-m750cl` y regenera `esperado/hola.txt`, `esperado/cpu.txt` y `esperado/pantalla.txt` compilando las mismas fuentes para la PC (`-DGCPS3_HOST`). El resultado es el mismo byte a byte en cada compilación.
 - Para mirar el dibujo de `pantalla` sin el emulador: `build/testdols/host/pantalla imagen.ppm`.
+- `make test` también corre cada DOL con la huella del estado de la CPU y la compara con la de Dolphin (`dolphin/*.txt`, `tests/unit/test_dolphin.c`): los que terminan, completos; `pantalla` y `contador`, 30 millones de instrucciones.
 
 Las fuentes que también compilan en la PC evitan lo que cambia entre plataformas: `long` (32 bits en el Gekko, 64 en la PC), el signo de `char` y la contracción de `a*b+c` (`-ffp-contract=off` en los dos lados).

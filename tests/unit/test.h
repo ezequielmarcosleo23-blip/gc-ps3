@@ -71,5 +71,6 @@ extern const test_case_t hw_io_tests[];
 extern const test_case_t xfb_tests[];
 extern const test_case_t hle_tests[];
 extern const test_case_t program_tests[];
+extern const test_case_t dolphin_tests[];
 
 #endif

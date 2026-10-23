@@ -319,7 +319,7 @@ static void test_spr_and_timebase(void)
     };
     CHECK(boot(code, 4) == 0);
     cpu.gpr[3] = 0xCAFEu;
-    cpu.tb = 100;
+    gekko_set_tb(&cpu, 100);
     gekko_run(&cpu, 4);
     uint32_t r4 = cpu.gpr[4], r5 = cpu.gpr[5], r6 = cpu.gpr[6];
     gekko_run(&cpu, 0);
@@ -367,29 +367,41 @@ static void test_trap_and_illegal(void)
     CHECK_EQ_U64(illegal, 1);
 }
 
+/* El decrementador como en Dolphin: llega a -1 dec × 12 ciclos después de
+ * escribirlo, ahí queda en 0xFFFFFFFF y pide la excepción */
 static void test_decrementer(void)
 {
     uint32_t code[64];
     for (int k = 0; k < 64; k++)
         code[k] = NOP;
     CHECK(boot(code, 64) == 0);
+    const uint64_t c0 = cpu.cycles;
     gekko_set_spr(&cpu, SPR_DEC, 2);
     gc_write32(&mem, 0x80000900u, NOP);  /* vector del decrementador */
     cpu.msr |= MSR_EE;
-    gekko_run(&cpu, 35);                 /* 2 ticks: DEC = 0, todavía nada */
-    uint32_t dec_a = cpu.dec, pc_a = cpu.pc;
-    gekko_run(&cpu, 1);                  /* el ciclo 36 lo pasa a -1 */
+    gekko_run(&cpu, 23);                 /* 23 ciclos: 1 tick, DEC = 1 */
+    uint32_t dec_a = gekko_get_spr(&cpu, SPR_DEC), pc_a = cpu.pc;
+    int pending_a = cpu.dec_pending;
+    gekko_run(&cpu, 1);                  /* el ciclo 24 lo pasa a -1 */
     int pending = cpu.dec_pending;
     gekko_step(&cpu);                    /* se toma la excepción */
     uint32_t pc_b = cpu.pc, srr0 = cpu.spr[SPR_SRR0];
-    uint64_t tb = cpu.tb;
+    uint32_t dec_b = gekko_get_spr(&cpu, SPR_DEC);
+    uint64_t tb = gekko_tb(&cpu) - c0 / 12;
+    /* Escribirlo con el bit de arriba de 0 a 1 la pide en el acto */
+    cpu.msr &= ~MSR_EE;
+    gekko_set_spr(&cpu, SPR_DEC, 100);
+    gekko_set_spr(&cpu, SPR_DEC, 0x80000000u);
+    int pending_sw = cpu.dec_pending, armed = cpu.dec_armed;
     done();
-    CHECK_EQ_U64(dec_a, 0);
-    CHECK_EQ_U64(pc_a, CODE + 35 * 4);
-    CHECK(pending == 1);
+    CHECK_EQ_U64(dec_a, 1);
+    CHECK_EQ_U64(pc_a, CODE + 23 * 4);
+    CHECK(pending_a == 0 && pending == 1);
     CHECK_EQ_U64(pc_b, 0x900 + 4);       /* ya ejecutó la primera del vector */
-    CHECK_EQ_U64(srr0, CODE + 36 * 4);
-    CHECK_EQ_U64(tb, 3);
+    CHECK_EQ_U64(srr0, CODE + 24 * 4);
+    CHECK_EQ_U64(dec_b, 0xFFFFFFFFu);    /* no sigue bajando (Dolphin) */
+    CHECK_EQ_U64(tb, 2);
+    CHECK(pending_sw == 1 && armed == 0);
 }
 
 static void test_external_needs_ee(void)

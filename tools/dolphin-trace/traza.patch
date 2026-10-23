@@ -1,0 +1,254 @@
+diff --git a/Source/Core/Core/PowerPC/Interpreter/Interpreter.cpp b/Source/Core/Core/PowerPC/Interpreter/Interpreter.cpp
+index affdc43936..2d1a6adec6 100644
+--- a/Source/Core/Core/PowerPC/Interpreter/Interpreter.cpp
++++ b/Source/Core/Core/PowerPC/Interpreter/Interpreter.cpp
+@@ -4,6 +4,8 @@
+ #include "Core/PowerPC/Interpreter/Interpreter.h"
+ 
+ #include <array>
++#include <cstdio>
++#include <cstdlib>
+ #include <string>
+ 
+ #include <fmt/format.h>
+@@ -24,6 +26,159 @@
+ #include "Core/PowerPC/PowerPC.h"
+ #include "Core/System.h"
+ 
++// gc-ps3: traza de huellas para comparar con el intérprete de gc-ps3
++// (tools/dolphin-trace y docs/traza-dolphin.md en gc-ps3). Se activa con
++// GCPS3_HUELLA o GCPS3_PUNTOS; sin esas variables Dolphin corre como siempre.
++//   GCPS3_HUELLA=archivo   pc, instrucción y huella del estado antes de cada
++//                          instrucción (16 bytes, little-endian)
++//   GCPS3_DETALLE=D:H      las 89 palabras del estado de las instrucciones D a H-1
++//                          en archivo.detalle
++//   GCPS3_PUNTOS=archivo   la huella encadenada cada 65536 instrucciones y al final
++//   GCPS3_LIMITE=N         sale de Dolphin después de N instrucciones
++// Con la traza activa el intérprete avanza instrucción por instrucción, como el
++// paso a paso del depurador (SingleStep): 1 ciclo por instrucción y los eventos
++// y las interrupciones entre una y otra, el mismo modelo que gc-ps3.
++namespace GCPS3Trace
++{
++struct Trace
++{
++  bool init = false;
++  bool on = false;
++  FILE* huella = nullptr;
++  FILE* detalle = nullptr;
++  FILE* puntos = nullptr;
++  u64 desde = 0, hasta = 0, limite = 0, n = 0, cadena = 0;
++  u32 last_pc = 0;
++};
++Trace s_trace;
++
++constexpr int PALABRAS = 89;
++constexpr u64 PUNTOS_CADA = 65536;
++
++u64 Ronda(u64 h, u64 w)
++{
++  h += w * 0xC2B2AE3D27D4EB4Full;
++  h = (h << 31) | (h >> 33);
++  return h * 0x9E3779B185EBCA87ull;
++}
++
++u64 Par(u32 lo, u32 hi)
++{
++  return u64(lo) | (u64(hi) << 32);
++}
++
++void Estado(const PowerPC::PowerPCState& st, u64* w)
++{
++  int k = 0;
++  for (int i = 0; i < 32; i += 2)
++    w[k++] = Par(st.gpr[i], st.gpr[i + 1]);
++  for (int i = 0; i < 32; i++)
++  {
++    w[k++] = st.ps[i].PS0AsU64();
++    w[k++] = st.ps[i].PS1AsU64();
++  }
++  w[k++] = Par(st.cr.Get(), st.GetXER().Hex);
++  w[k++] = Par(st.spr[SPR_LR], st.spr[SPR_CTR]);
++  w[k++] = Par(st.msr.Hex, st.fpscr.Hex);
++  w[k++] = Par(st.spr[SPR_SRR0], st.spr[SPR_SRR1]);
++  for (int i = 0; i < 8; i += 2)
++    w[k++] = Par(st.spr[SPR_GQR0 + i], st.spr[SPR_GQR0 + i + 1]);
++  w[k++] = Par(st.spr[SPR_HID0], st.spr[SPR_HID2]);
++}
++
++void PutLE(u8* p, u64 v, int bytes)
++{
++  for (int k = 0; k < bytes; k++)
++    p[k] = static_cast<u8>(v >> (8 * k));
++}
++
++void Init()
++{
++  s_trace.init = true;
++  const char* huella = std::getenv("GCPS3_HUELLA");
++  const char* puntos = std::getenv("GCPS3_PUNTOS");
++  if (!huella && !puntos)
++    return;
++  s_trace.on = true;
++  if (huella)
++    s_trace.huella = std::fopen(huella, "wb");
++  if (puntos)
++  {
++    s_trace.puntos = std::fopen(puntos, "w");
++    if (s_trace.puntos)
++      std::fprintf(s_trace.puntos, "# gc-ps3 huella v1 dolphin\n");
++  }
++  if (const char* lim = std::getenv("GCPS3_LIMITE"))
++    s_trace.limite = std::strtoull(lim, nullptr, 0);
++  const char* det = std::getenv("GCPS3_DETALLE");
++  if (det && huella)
++  {
++    char* colon = nullptr;
++    s_trace.desde = std::strtoull(det, &colon, 0);
++    if (colon && *colon == ':')
++      s_trace.hasta = std::strtoull(colon + 1, nullptr, 0);
++    s_trace.detalle = std::fopen((std::string(huella) + ".detalle").c_str(), "wb");
++  }
++  if ((huella && !s_trace.huella) || (puntos && !s_trace.puntos) || (det && huella && !s_trace.detalle))
++  {
++    std::fprintf(stderr, "gc-ps3: no se pudo crear la huella, los puntos o el detalle\n");
++    std::_Exit(3);
++  }
++}
++
++[[noreturn]] void Fin()
++{
++  if (s_trace.puntos && s_trace.n % PUNTOS_CADA != 0)
++    std::fprintf(s_trace.puntos, "%llu %08x %016llx\n", static_cast<unsigned long long>(s_trace.n),
++                 s_trace.last_pc, static_cast<unsigned long long>(s_trace.cadena));
++  for (FILE* f : {s_trace.huella, s_trace.detalle, s_trace.puntos})
++  {
++    if (f)
++      std::fclose(f);
++  }
++  std::fprintf(stderr, "gc-ps3: huella de %llu instrucciones, cadena %016llx\n",
++               static_cast<unsigned long long>(s_trace.n),
++               static_cast<unsigned long long>(s_trace.cadena));
++  std::fflush(stderr);
++  std::_Exit(0);
++}
++
++void Paso(const PowerPC::PowerPCState& st, u32 pc, u32 inst)
++{
++  if (s_trace.limite && s_trace.n >= s_trace.limite)
++    Fin();
++  u64 w[PALABRAS];
++  Estado(st, w);
++  u64 estado = 0;
++  for (u64 x : w)
++    estado = Ronda(estado, x);
++  if (s_trace.huella)
++  {
++    u8 rec[16];
++    PutLE(rec, pc, 4);
++    PutLE(rec + 4, inst, 4);
++    PutLE(rec + 8, estado, 8);
++    std::fwrite(rec, 1, sizeof(rec), s_trace.huella);
++  }
++  if (s_trace.detalle && s_trace.n >= s_trace.desde && s_trace.n < s_trace.hasta)
++  {
++    u8 rec[16 + 8 * PALABRAS];
++    PutLE(rec, s_trace.n, 8);
++    PutLE(rec + 8, pc, 4);
++    PutLE(rec + 12, inst, 4);
++    for (int k = 0; k < PALABRAS; k++)
++      PutLE(rec + 16 + 8 * k, w[k], 8);
++    std::fwrite(rec, 1, sizeof(rec), s_trace.detalle);
++  }
++  s_trace.cadena = Ronda(Ronda(s_trace.cadena, Par(pc, inst)), estado);
++  s_trace.last_pc = pc;
++  s_trace.n++;
++  if (s_trace.puntos && s_trace.n % PUNTOS_CADA == 0)
++    std::fprintf(s_trace.puntos, "%llu %08x %016llx\n", static_cast<unsigned long long>(s_trace.n),
++                 pc, static_cast<unsigned long long>(s_trace.cadena));
++}
++}  // namespace GCPS3Trace
++
+ namespace
+ {
+ // Determines whether or not the given instruction is one where its execution
+@@ -130,6 +285,8 @@ int Interpreter::SingleStepInner()
+ 
+   m_ppc_state.npc = m_ppc_state.pc + sizeof(UGeckoInstruction);
+   m_prev_inst.hex = m_mmu.Read_Opcode(m_ppc_state.pc);
++  if (GCPS3Trace::s_trace.on)
++    GCPS3Trace::Paso(m_ppc_state, m_ppc_state.pc, m_prev_inst.hex);
+ 
+   const GekkoOPInfo* opinfo = PPCTables::GetOpInfo(m_prev_inst, m_ppc_state.pc);
+ 
+@@ -230,6 +387,15 @@ void Interpreter::Run()
+   auto& core_timing = m_system.GetCoreTiming();
+   auto& cpu = m_system.GetCPU();
+   auto& power_pc = m_system.GetPowerPC();
++  if (!GCPS3Trace::s_trace.init)
++    GCPS3Trace::Init();
++  if (GCPS3Trace::s_trace.on)
++  {
++    // gc-ps3: instrucción por instrucción, como el paso a paso del depurador
++    while (cpu.GetState() == CPU::State::Running)
++      SingleStep();
++    return;
++  }
+   while (cpu.GetState() == CPU::State::Running)
+   {
+     // CoreTiming Advance() ends the previous slice and declares the start of the next
+diff --git a/Source/Core/Core/PowerPC/Interpreter/Interpreter_FloatingPoint.cpp b/Source/Core/Core/PowerPC/Interpreter/Interpreter_FloatingPoint.cpp
+index 641a2330b9..cb6d76f2e9 100644
+--- a/Source/Core/Core/PowerPC/Interpreter/Interpreter_FloatingPoint.cpp
++++ b/Source/Core/Core/PowerPC/Interpreter/Interpreter_FloatingPoint.cpp
+@@ -181,7 +181,10 @@ void Interpreter::Helper_FloatCompareOrdered(PowerPC::PowerPCState& ppc_state,
+   const u32 compare_value = static_cast<u32>(compare_result);
+ 
+   // Clear and set the FPCC bits accordingly.
+-  ppc_state.fpscr.FPRF = (ppc_state.fpscr.FPRF & ~FPCC_MASK) | compare_value;
++  // gc-ps3: FPRF es el campo de 5 bits sin desplazar, y FPCC_MASK está
++  // desplazada (0xF000): el AND no borraba nada y quedaban los FPCC anteriores.
++  // Los JIT (Jit64, JitArm64) sí los borran.
++  ppc_state.fpscr.FPRF = (ppc_state.fpscr.FPRF & ~(FPCC_MASK >> FPRF_SHIFT)) | compare_value;
+ 
+   ppc_state.cr.SetField(inst.CRFD, compare_value);
+ }
+@@ -216,7 +219,10 @@ void Interpreter::Helper_FloatCompareUnordered(PowerPC::PowerPCState& ppc_state,
+   const u32 compare_value = static_cast<u32>(compare_result);
+ 
+   // Clear and set the FPCC bits accordingly.
+-  ppc_state.fpscr.FPRF = (ppc_state.fpscr.FPRF & ~FPCC_MASK) | compare_value;
++  // gc-ps3: FPRF es el campo de 5 bits sin desplazar, y FPCC_MASK está
++  // desplazada (0xF000): el AND no borraba nada y quedaban los FPCC anteriores.
++  // Los JIT (Jit64, JitArm64) sí los borran.
++  ppc_state.fpscr.FPRF = (ppc_state.fpscr.FPRF & ~(FPCC_MASK >> FPRF_SHIFT)) | compare_value;
+ 
+   ppc_state.cr.SetField(inst.CRFD, compare_value);
+ }
+diff --git a/Source/Core/Core/PowerPC/Interpreter/Interpreter_Integer.cpp b/Source/Core/Core/PowerPC/Interpreter/Interpreter_Integer.cpp
+index 975f408068..462d6f358d 100644
+--- a/Source/Core/Core/PowerPC/Interpreter/Interpreter_Integer.cpp
++++ b/Source/Core/Core/PowerPC/Interpreter/Interpreter_Integer.cpp
+@@ -471,7 +471,10 @@ void Interpreter::addmex(Interpreter& interpreter, UGeckoInstruction inst)
+   const u32 result = a + b + carry;
+ 
+   ppc_state.gpr[inst.RD] = result;
+-  ppc_state.SetCarry(Helper_Carry(a, carry - 1));
++  // gc-ps3: a + 0xFFFFFFFF + carry lleva acarreo si a != 0 o carry != 0. Con
++  // carry = 1, Helper_Carry(a, carry - 1) = Helper_Carry(a, 0) daba 0. Los JIT
++  // usan el acarreo de la máquina y dan bien.
++  ppc_state.SetCarry(a != 0 || carry != 0);
+ 
+   if (inst.OE)
+     ppc_state.SetXER_OV(HasAddOverflowed(a, b, result));
+@@ -663,7 +666,10 @@ void Interpreter::subfmex(Interpreter& interpreter, UGeckoInstruction inst)
+   const u32 result = a + b + carry;
+ 
+   ppc_state.gpr[inst.RD] = result;
+-  ppc_state.SetCarry(Helper_Carry(a, carry - 1));
++  // gc-ps3: a + 0xFFFFFFFF + carry lleva acarreo si a != 0 o carry != 0. Con
++  // carry = 1, Helper_Carry(a, carry - 1) = Helper_Carry(a, 0) daba 0. Los JIT
++  // usan el acarreo de la máquina y dan bien.
++  ppc_state.SetCarry(a != 0 || carry != 0);
+ 
+   if (inst.OE)
+     ppc_state.SetXER_OV(HasAddOverflowed(a, b, result));

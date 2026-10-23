@@ -57,7 +57,12 @@ static int boot_code(const uint32_t *code, uint32_t n, int pal)
     dolb_init(&b);
     dolb_code(&b, 0, TEXT0, code, n);
     dolb_entry(&b, TEXT0);
-    return gc_system_boot_dol(&sys, b.buf, b.len, &cfg) == GC_DOL_OK ? 0 : -1;
+    if (gc_system_boot_dol(&sys, b.buf, b.len, &cfg) != GC_DOL_OK)
+        return -1;
+    /* Estas pruebas miden el hardware desde el encendido: el programa empieza
+     * en el ciclo 0 y no en GC_BOOT_CYCLES (los eventos se agendaron desde 0) */
+    sys.cpu.cycles = 0;
+    return 0;
 }
 
 static int boot(int pal) { return boot_code(spin, 3, pal); }
