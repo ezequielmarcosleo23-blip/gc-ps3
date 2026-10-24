@@ -2,7 +2,7 @@
 
 El lado de la GPU de la GameCube, portable: lee el FIFO de GX de la RAM, decodifica los comandos, guarda el estado de BP, CP y XF y carga y transforma los vértices de cada primitiva. Lo que la CPU ve de GX (gather pipe, registros del CP y del PE) está en [src/hw](../hw/README.md). Sigue a Dolphin (commit `cf5cb7ef`) con un solo hilo; lo portado lleva la atribución en el encabezado.
 
-Fase 2 ([docs/fase2.md](../../docs/fase2.md)): etapas A (FIFO y estado), B (vértices y XF) y, en curso, C (el renderizador por software de Dolphin: el armado, el recorte, el rasterizador, el TEV, la mezcla con el EFB y la caja envolvente; faltan las texturas y la conversión de las copias a la RAM). El backend del RSX (`include/backend/gfx_backend.h`) llega en la D.
+Fase 2 ([docs/fase2.md](../../docs/fase2.md)): etapas A (FIFO y estado), B (vértices y XF) y, en curso, C (el renderizador por software de Dolphin: el armado, el recorte, el rasterizador, el TEV, las texturas, la mezcla con el EFB y la caja envolvente; falta la conversión de las copias a la RAM). El backend del RSX (`include/backend/gfx_backend.h`) llega en la D.
 
 | Archivo | Qué hace | En Dolphin |
 | --- | --- | --- |
@@ -20,6 +20,8 @@ Fase 2 ([docs/fase2.md](../../docs/fase2.md)): etapas A (FIFO y estado), B (vér
 | `tev.h`, `tev.c` | El TEV: etapas indirectas, combinadores, constantes, swap, prueba de alfa, textura de Z, niebla, Z tardía (las texturas dan negro hasta C4) | `VideoBackends/Software/Tev.cpp` |
 | `efb.h`, `efb.c` | El EFB: 640 × 528 de color y Z en los formatos de píxel; prueba de Z, mezcla, resta, lógicas, alfa de destino, dither | `VideoBackends/Software/SWEfbInterface.cpp` |
 | `bbox.c` | La caja envolvente con la caché de VideoCommon | `VideoCommon/BoundingBox.cpp`, `SWBoundingBox.cpp` |
+| `texdec.h`, `texdec.c` | Decodificadores de texturas, listos para SPU: los 11 formatos con las 3 paletas, por texel y la textura entera de a bloques | `VideoCommon/TextureDecoder_Common.cpp` |
+| `tex.c` | La TMEM (1 MB) con la carga de paletas y la precarga (BP 0x63, 0x65) y el muestreador: envolturas, más cercano y bilineal, mipmaps | `BPStructs.cpp`, `VideoBackends/Software/TextureSampler.cpp` |
 | `copy.c` | BP 0x52: rectángulo, tamaño en la RAM, borrado; el volcado de copias; la lectura del EFB por el CPU | `BPStructs.cpp`, `TextureCacheBase.cpp`, `BPFunctions.cpp`, `EfbCopy.cpp`, `EFBInterface.cpp` |
 | `x86.h` | Las conversiones de float a entero como en x86-64 (fuera de rango o NaN) | |
 | `estado.c` | El estado en texto para compararlo con Dolphin | El parche de `tools/dolphin-trace` |
@@ -84,7 +86,7 @@ Listo para SPU quiere decir búfer a búfer, sin estado global ni punteros a la 
 
 ## Pruebas
 
-`tests/unit/test_gx.c` (19 pruebas), `test_vtx.c` (10), `test_xform.c` (12), `test_prim.c` (6), `test_efb.c` (5), `test_setup.c` (5) y `test_raster.c` (7), y los DOLs `gx_fifo`, `gx_tri` y `gx_raster` ([tests/dol](../../tests/dol/README.md)), iguales a Dolphin instrucción por instrucción, con el mismo estado de GX y EFB al final y los mismos vértices, triángulos y copias bit a bit ([docs/traza-dolphin.md](../../docs/traza-dolphin.md)).
+`tests/unit/test_gx.c` (19 pruebas), `test_vtx.c` (10), `test_xform.c` (12), `test_prim.c` (6), `test_efb.c` (5), `test_setup.c` (5), `test_raster.c` (7) y `test_tex.c` (6), y los DOLs `gx_fifo`, `gx_tri`, `gx_raster` y `gx_tex` ([tests/dol](../../tests/dol/README.md)), iguales a Dolphin instrucción por instrucción, con el mismo estado de GX y EFB al final y los mismos vértices, triángulos y copias bit a bit ([docs/traza-dolphin.md](../../docs/traza-dolphin.md)).
 
 ## Del triángulo al píxel (etapa C3)
 
@@ -98,5 +100,17 @@ Listo para SPU quiere decir búfer a búfer, sin estado global ni punteros a la 
 | Mezcla | Factores con el bit de arriba sumado (0 a 256), resta, las 16 lógicas, alfa de destino, dither de Bayer solo en RGBA6, máscaras de color y alfa |
 | CPU | 0xC8000000: color en ARGB con el modo de alfa del PE (BP 0x43 da el formato) o Z de 24 bits; lo de 8 y 16 bits se queda con los bits de abajo y lo de 64 los pone en la parte baja; escribir no hace nada |
 | Caja envolvente | La caché de VideoCommon (con `BBoxEnable`) y las coordenadas que actualiza cada píxel, redondeadas a 2 × 2 |
+
+## Texturas (etapa C4)
+
+Sin caché, como Dolphin por software: cada texel se lee de la RAM (desde la dirección de BP hasta el final de los 24 MB) o de la TMEM y se decodifica en el momento; lo que se lee fuera da 0.
+
+| Paso | Cómo es |
+| --- | --- |
+| TMEM | 1 MB. BP 0x65 copia la paleta de la RAM (sin los bits de arriba de la dirección); BP 0x63 distinto de 0 precarga, y con tipo 3 (RGBA8) reparte cada par de bloques entre el banco par (alfa y rojo) y el impar (verde y azul). Un tramo que no es RAM no se copia |
+| Decodificar | Los 16 bits big-endian; IA8 con el alfa en el primer byte; CMPR con el color 2 = (5 c1 + 3 c2) / 8 y el 3 transparente cuando c1 <= c2. Un formato que no existe da 0 (en Dolphin, lo que hubiera en la pila) |
+| Envoltura | Recortar, repetir con AND (también sin potencia de 2), espejo; la 3 como recortar |
+| Filtro | Más cercano en s >> 7; bilineal medio texel corrido con pesos de 7 bits |
+| Mipmaps | Del LOD en s28.4 del rasterizador: más cercano redondea desde ,5; lineal mezcla en dieciseisavos. El comienzo de cada nivel se cuenta con el tamaño sin redondear al bloque (mínimo un bloque); en RGBA8 precargado solo avanza el banco par |
 
 Las conversiones de float a entero siguen a x86-64 (`x86.h`) y la aritmética entera que en Dolphin puede desbordar se hace con la vuelta de 32 bits. Lo que en Dolphin escribe fuera de sus arreglos (más de 2 canales, 8 coordenadas o 4 etapas indirectas en genMode) se recorta a esos máximos.

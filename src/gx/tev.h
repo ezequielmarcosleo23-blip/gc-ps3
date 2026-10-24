@@ -61,8 +61,8 @@ void gx_tev_set_konst(struct gc_gx *gx, gx_tev_t *t);
  * con el EFB */
 void gx_tev_draw(struct gc_gx *gx, gx_tev_t *t);
 
-/* Una muestra de la textura texmap en s, t (s17.7) con el LOD dado: RGBA.
- * Las texturas llegan en el paso C4; hasta entonces da negro. */
+/* Una muestra de la textura texmap en s, t (s17.7) con el LOD en s28.4 y el
+ * filtro que eligió el rasterizador: RGBA (tex.c, TextureSampler::Sample) */
 void gx_tex_sample(struct gc_gx *gx, int32_t s, int32_t t, int32_t lod, int linear, uint32_t texmap,
                    uint8_t out[4]);
 

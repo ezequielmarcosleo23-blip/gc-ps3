@@ -91,23 +91,6 @@ static inline float clampf(float v, float lo, float hi)
     return (hi < m) ? hi : m;
 }
 
-/* ---- texturas ------------------------------------------------------------------------- */
-
-void gx_tex_sample(gc_gx_t *gx, int32_t s, int32_t t, int32_t lod, int linear, uint32_t texmap,
-                   uint8_t out[4])
-{
-    (void)s;
-    (void)t;
-    (void)lod;
-    (void)linear;
-    (void)texmap;
-    if (!gx->tex_noted) {
-        gx->tex_noted = 1;
-        GC_LOGI("gx: el TEV pide una textura; las texturas llegan en el paso C4 (negro)");
-    }
-    memset(out, 0, 4);
-}
-
 /* ---- constantes ----------------------------------------------------------------------- */
 
 void gx_tev_set_konst(gc_gx_t *gx, gx_tev_t *t)

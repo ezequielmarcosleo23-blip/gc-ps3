@@ -115,7 +115,6 @@ typedef struct gc_gx {
     uint64_t  display_lists;
     uint32_t  unknown;                /* opcodes desconocidos */
     uint32_t  warnings;               /* avisos del log (se limitan) */
-    uint8_t   bp_noted[256];          /* registros de BP con efecto pendiente ya avisados */
 
     /* Vértices (prim.c) */
     struct gc_gx_vtx *vtx;            /* planes, foto de XF, caché de normales y búferes */
@@ -138,7 +137,10 @@ typedef struct gc_gx {
      * 0xE0-0xE7, r g b a (PixelShaderManager colors y kcolors) */
     int16_t   tev_color[4][4];
     int16_t   tev_kcolor[4][4];
-    int       tex_noted;              /* ya se avisó que faltan las texturas (C4) */
+    int       tex_noted;              /* ya se avisó de un formato de textura que no existe */
+
+    /* TMEM: 1 MB de paletas y texturas precargadas (tex.c) */
+    uint8_t  *tmem;
 
     /* Caja envolvente (bbox.c): lo que guarda VideoCommon (BoundingBox) y las
      * coordenadas que lleva el renderizador (BBoxManager) */
@@ -227,6 +229,13 @@ void gc_gx_efb_final(gc_gx_t *gx);
 uint32_t gc_gx_efb_peek(gc_gx_t *gx, uint32_t phys);
 /* Las máscaras de escritura del EFB según BP 0x40, 0x41 y 0x43 */
 gx_efb_write_t gc_gx_efb_write_mask(const gc_gx_t *gx);
+
+/* ---- texturas (tex.c) ---- */
+
+/* BP 0x65: carga una paleta de la RAM a la TMEM */
+void     gc_gx_load_tlut(gc_gx_t *gx);
+/* BP 0x63 distinto de 0: precarga una textura a la TMEM */
+void     gc_gx_preload(gc_gx_t *gx);
 
 /* ---- caja envolvente (bbox.c) ---- */
 

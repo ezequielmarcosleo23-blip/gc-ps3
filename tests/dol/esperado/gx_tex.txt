@@ -1,0 +1,10 @@
+gx_tex: texturas
+gx_tex: estado inicial
+gx_tex: 1. formatos
+gx_tex: 2. envolturas
+gx_tex: 3. filtros
+gx_tex: 4. mipmaps
+gx_tex: 5. TMEM
+gx_tex: 6. unidades
+gx_tex: 7. textura por color y mezcla
+gx_tex: 8 tokens, 54432 bytes de texturas; OK

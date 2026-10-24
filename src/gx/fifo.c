@@ -30,6 +30,7 @@
 #include "core/system.h"
 #include "gx/gx.h"
 #include "gx/raster.h"
+#include "gx/texdec.h"
 
 #define LOG_MAX 16
 
@@ -138,7 +139,6 @@ void gc_gx_reset(gc_gx_t *gx)
     memset(gx->xf, 0, sizeof gx->xf);
     gx->commands = gx->primitives = gx->vertices = gx->display_lists = 0;
     gx->unknown = gx->warnings = 0;
-    memset(gx->bp_noted, 0, sizeof gx->bp_noted);
     gc_gx_vtx_reset(gx);
     if (gx->efb)
         memset(gx->efb, 0, sizeof *gx->efb);
@@ -148,6 +148,8 @@ void gc_gx_reset(gc_gx_t *gx)
     memset(gx->tev_color, 0, sizeof gx->tev_color);
     memset(gx->tev_kcolor, 0, sizeof gx->tev_kcolor);
     gx->tex_noted = 0;
+    if (gx->tmem)
+        memset(gx->tmem, 0, GX_TMEM_SIZE);
     memset(&gx->bbox, 0, sizeof gx->bbox);
     gx->bbox.valid = 1;
 }
@@ -158,7 +160,8 @@ int gc_gx_init(gc_gx_t *gx, struct gc_system *sys)
     gx->vbuf = malloc(GC_GX_VBUF_SIZE);
     gx->efb = malloc(sizeof *gx->efb);
     gx->raster = calloc(1, sizeof *gx->raster);
-    if (!gx->vbuf || !gx->efb || !gx->raster || gc_gx_vtx_init(gx) != 0) {
+    gx->tmem = malloc(GX_TMEM_SIZE);
+    if (!gx->vbuf || !gx->efb || !gx->raster || !gx->tmem || gc_gx_vtx_init(gx) != 0) {
         gc_gx_free(gx);
         return -1;
     }
@@ -174,5 +177,7 @@ void gc_gx_free(gc_gx_t *gx)
     gx->efb = NULL;
     free(gx->raster);
     gx->raster = NULL;
+    free(gx->tmem);
+    gx->tmem = NULL;
     gc_gx_vtx_free(gx);
 }

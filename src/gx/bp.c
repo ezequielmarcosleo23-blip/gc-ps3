@@ -23,10 +23,9 @@
  * BPWritten). El valor nuevo pasa por la máscara de BP (0xFE), que vuelve a
  * 0xFFFFFF después de cualquier otra escritura. Hacen algo el token (0x47,
  * 0x48), "draw done" (0x45 = 2), la copia del EFB (0x52, copy.c), la tijera
- * (0x20, 0x21, 0x59), la caja envolvente (0x55, 0x56) y los colores del TEV
- * (0xE0-0xE7); el resto se guarda y se lee al dibujar, y los otros registros
- * que disparan algo (cargas de TLUT y de TMEM...) se avisan una vez en el log
- * hasta que se implementen.
+ * (0x20, 0x21, 0x59), la caja envolvente (0x55, 0x56), las cargas de la TMEM
+ * (0x63, 0x65) y los colores del TEV (0xE0-0xE7); el resto se guarda y se lee
+ * al dibujar.
  */
 #include "core/log.h"
 #include "core/system.h"
@@ -48,15 +47,6 @@ static int always_acts(uint8_t reg)
     default:
         return 0;
     }
-}
-
-static void note_pending(gc_gx_t *gx, uint8_t reg, uint32_t v)
-{
-    if (gx->bp_noted[reg])
-        return;
-    gx->bp_noted[reg] = 1;
-    GC_LOGI("gx: BP 0x%02x = 0x%06x guardado; su efecto llega en la etapa C", (unsigned)reg,
-            (unsigned)v);
 }
 
 void gc_gx_load_bp(gc_gx_t *gx, uint8_t reg, uint32_t value)
@@ -100,6 +90,15 @@ void gc_gx_load_bp(gc_gx_t *gx, uint8_t reg, uint32_t value)
     }
     case 0x57:                          /* BPMEM_CLEAR_PIXEL_PERF: sin contadores (como Dolphin) */
         return;
+    case 0x63:                          /* BPMEM_PRELOAD_MODE: precarga a la TMEM */
+        gc_gx_preload(gx);
+        return;
+    case 0x64:                          /* BPMEM_LOADTLUT0: solo la dirección */
+    case 0x66:                          /* BPMEM_TEXINVALIDATE: sin caché de texturas */
+        return;
+    case 0x65:                          /* BPMEM_LOADTLUT1: paleta a la TMEM */
+        gc_gx_load_tlut(gx);
+        return;
     case 0xE0: case 0xE2: case 0xE4: case 0xE6: {   /* TEV: rojo y alfa */
         int16_t *c = (nv >> 23) & 1u ? gx->tev_kcolor[(reg >> 1) & 3u] : gx->tev_color[(reg >> 1) & 3u];
         c[0] = (int16_t)((int32_t)(nv << 21) >> 21);
@@ -113,8 +112,6 @@ void gc_gx_load_bp(gc_gx_t *gx, uint8_t reg, uint32_t value)
         return;
     }
     default:
-        if (always_acts(reg))
-            note_pending(gx, reg, nv);
         return;
     }
 }

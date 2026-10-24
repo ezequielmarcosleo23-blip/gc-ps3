@@ -28,6 +28,8 @@
  *                      del Dolphin parchado (GCPS3_VERTICES)
  *     --triangulos ARCHIVO cada triángulo que llega al rasterizador (GCPS3_TRIANGULOS)
  *     --copias ARCHIVO     cada copia del EFB y al final el EFB, con CRC (GCPS3_COPIAS)
+ *     --efb ARCHIVO        al terminar, el color del EFB en PNG (640x528, con el
+ *                      formato de píxel de ese momento): para mirar lo dibujado
  *
  * Lo que el programa imprime (OSReport, printf...) sale por la salida estándar;
  * los mensajes del emulador, por la de error. Sale con el código de exit() del
@@ -70,6 +72,7 @@ static void usage(FILE *out, const char *argv0)
             "  --vertices ARCHIVO   cada vertice transformado, en texto (como Dolphin)\n"
             "  --triangulos ARCHIVO cada triangulo que llega al rasterizador (como Dolphin)\n"
             "  --copias ARCHIVO     cada copia del EFB y el EFB al final, con CRC (como Dolphin)\n"
+            "  --efb ARCHIVO        al terminar, el color del EFB en PNG\n"
             "  --version, --help\n",
             argv0, (unsigned)DEFAULT_CYCLES);
 }
@@ -263,6 +266,45 @@ static void print_frame(void *ctx, const gc_frame_t *f)
             (unsigned long long)f->field, (unsigned)f->width, (unsigned)f->height, (unsigned)f->crc);
 }
 
+static int write_png(const char *path, const uint8_t *rgb, uint32_t w, uint32_t h)
+{
+    int rc = 0;
+    const size_t cap = gc_png_size(w, h);
+    uint8_t *png = cap ? malloc(cap) : NULL;
+    const size_t n = png ? gc_png_encode(rgb, w, h, png, cap) : 0;
+    FILE *f = n ? fopen(path, "wb") : NULL;
+    if (!f || fwrite(png, 1, n, f) != n) {
+        fprintf(stderr, "runner: no se pudo escribir %s\n", path);
+        rc = -1;
+    } else {
+        fprintf(stderr, "runner: imagen en %s\n", path);
+    }
+    if (f && fclose(f) != 0)
+        rc = -1;
+    free(png);
+    return rc;
+}
+
+/* El color del EFB al terminar, en PNG */
+static int write_efb(const char *path)
+{
+    const uint32_t pf = sys.gx.bp[0x43] & 7u;
+    uint8_t *rgb = malloc((size_t)GX_EFB_WIDTH * GX_EFB_HEIGHT * 3);
+    if (!rgb)
+        return -1;
+    for (uint32_t y = 0; y < GX_EFB_HEIGHT; y++)
+        for (uint32_t x = 0; x < GX_EFB_WIDTH; x++) {
+            const uint32_t c = gx_efb_get_color(sys.gx.efb, pf, x, y);
+            uint8_t *p = rgb + 3 * ((size_t)y * GX_EFB_WIDTH + x);
+            p[0] = (uint8_t)(c >> 24);
+            p[1] = (uint8_t)(c >> 16);
+            p[2] = (uint8_t)(c >> 8);
+        }
+    const int rc = write_png(path, rgb, GX_EFB_WIDTH, GX_EFB_HEIGHT);
+    free(rgb);
+    return rc;
+}
+
 /* El último cuadro: tamaño y CRC por la salida de error; en PNG si hay archivo.
  * -1 si se pidió el PNG y no se pudo escribir. */
 static int report_frame(const char *path)
@@ -278,22 +320,7 @@ static int report_frame(const char *path)
     }
     fprintf(stderr, "runner: cuadro %ux%u, crc32 RGB 0x%08x\n", (unsigned)w, (unsigned)h,
             (unsigned)gc_crc32(0, rgb, size));
-    int rc = 0;
-    if (path) {
-        const size_t cap = gc_png_size(w, h);
-        uint8_t *png = cap ? malloc(cap) : NULL;
-        const size_t n = png ? gc_png_encode(rgb, w, h, png, cap) : 0;
-        FILE *f = n ? fopen(path, "wb") : NULL;
-        if (!f || fwrite(png, 1, n, f) != n) {
-            fprintf(stderr, "runner: no se pudo escribir %s\n", path);
-            rc = -1;
-        } else {
-            fprintf(stderr, "runner: imagen en %s\n", path);
-        }
-        if (f && fclose(f) != 0)
-            rc = -1;
-        free(png);
-    }
+    const int rc = path ? write_png(path, rgb, w, h) : 0;
     free(rgb);
     return rc;
 }
@@ -303,7 +330,7 @@ int main(int argc, char **argv)
     uint64_t cycles = DEFAULT_CYCLES;
     const char *dol_path = NULL, *trace_path = NULL, *map_path = NULL, *image_path = NULL;
     const char *huella_path = NULL, *puntos_path = NULL, *detalle = NULL, *estado_path = NULL;
-    const char *vertices_path = NULL, *triangles_path = NULL, *copies_path = NULL;
+    const char *vertices_path = NULL, *triangles_path = NULL, *copies_path = NULL, *efb_path = NULL;
     gc_boot_config_t cfg = { 0, 0 };
     int have_rtc = 0, list_frames = 0;
 
@@ -338,6 +365,12 @@ int main(int argc, char **argv)
                 return 2;
             }
             image_path = argv[i];
+        } else if (strcmp(a, "--efb") == 0) {
+            if (++i >= argc) {
+                fprintf(stderr, "--efb necesita un archivo\n");
+                return 2;
+            }
+            efb_path = argv[i];
         } else if (strcmp(a, "--cuadros") == 0) {
             list_frames = 1;
         } else if (strcmp(a, "--huella") == 0 || strcmp(a, "--puntos") == 0 ||
@@ -524,7 +557,7 @@ int main(int argc, char **argv)
     else
         fprintf(stderr, "runner: %llu campos de video, ninguno con XFB\n",
                 (unsigned long long)sys.vi.fields);
-    const int image_failed = report_frame(image_path) != 0;
+    const int image_failed = report_frame(image_path) != 0 || (efb_path && write_efb(efb_path) != 0);
     const int estado_failed = estado_path && write_estado_gx(estado_path) != 0;
     if (vertices_file)
         fprintf(stderr, "runner: %llu primitivas, %llu vertices transformados\n",

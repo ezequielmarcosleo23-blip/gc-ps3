@@ -390,6 +390,7 @@ static void test_contador(void) { CHECK(check_dol("contador")); }
 static void test_gx_fifo(void)  { CHECK(check_dol("gx_fifo")); }
 static void test_gx_tri(void)   { CHECK(check_dol("gx_tri")); }
 static void test_gx_raster(void) { CHECK(check_dol("gx_raster")); }
+static void test_gx_tex(void) { CHECK(check_dol("gx_tex")); }
 
 const test_case_t dolphin_tests[] = {
     { "huella: formato v1 (el mismo del parche de Dolphin)", test_huella_format },
@@ -402,5 +403,6 @@ const test_case_t dolphin_tests[] = {
     { "dolphin gx_fifo: cada instrucción y el estado de GX iguales a Dolphin", test_gx_fifo },
     { "dolphin gx_tri: cada instrucción, el estado de GX y cada vértice iguales a Dolphin", test_gx_tri },
     { "dolphin gx_raster: cada instrucción, vértice, triángulo y el EFB iguales a Dolphin", test_gx_raster },
+    { "dolphin gx_tex: cada instrucción, vértice, triángulo y el EFB con texturas iguales a Dolphin", test_gx_tex },
     { NULL, NULL },
 };

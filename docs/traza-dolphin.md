@@ -85,7 +85,7 @@ Cada float va con sus 8 dígitos hexadecimales, y un NaN siempre como `7fc00000`
 | Variable del parche | Opción del runner | Qué anota |
 | --- | --- | --- |
 | `GCPS3_TRIANGULOS` | `--triangulos` | Cada triángulo que llega al rasterizador (`Rasterizer::DrawTriangleFrontFace`), ya recortado: `t<n>` y por vértice `v`, x, y, z de la pantalla, w, los 2 colores y las n coordenadas (n es BP genMode numtexgens). Las líneas y los puntos llegan como dos triángulos cada uno |
-| `GCPS3_COPIAS` | `--copias` | Cada copia del EFB (BP 0x52): `c` formato de píxel, BP 0x52, rectángulo pedido, destino y paso, el CRC-32 del EFB en el rectángulo (los 3 bytes de color de cada píxel y aparte los de Z, después de copiar y antes de borrar) y el de los bytes que quedaron en la RAM; `fuera` si el rectángulo empieza fuera del EFB. Al final de la traza, `efb` con el CRC del EFB entero |
+| `GCPS3_COPIAS` | `--copias` (y `--efb ARCHIVO` deja el color del EFB final en PNG, para mirarlo) | Cada copia del EFB (BP 0x52): `c` formato de píxel, BP 0x52, rectángulo pedido, destino y paso, el CRC-32 del EFB en el rectángulo (los 3 bytes de color de cada píxel y aparte los de Z, después de copiar y antes de borrar) y el de los bytes que quedaron en la RAM; `fuera` si el rectángulo empieza fuera del EFB. Al final de la traza, `efb` con el CRC del EFB entero |
 
 `comparar.py` guarda la referencia de triángulos si el DOL dibujó alguno, y la de copias si copió o dejó algo en el EFB (`efb c5b034a6 c5b034a6` es el EFB en cero). Una copia sin destino (paso 0) no escribe la RAM y sirve para anotar el CRC de una parte del EFB a mitad de un DOL. `--sin-copias` saltea esa comparación. Con el video por software, Dolphin siempre escribe las copias en la RAM en el momento (no tiene copias a la VRAM), así que `EFBToTextureEnable` y `DeferEFBCopies` no cambian nada.
 
@@ -95,7 +95,7 @@ Cada float va con sus 8 dígitos hexadecimales, y un NaN siempre como `7fc00000`
 
 ## Resultado (2026-10-23; `gx_fifo`, `gx_tri` y `gx_raster` el 2026-10-24)
 
-Los 9 DOLs dan el mismo estado que Dolphin antes de cada instrucción, el mismo estado de GX y el mismo EFB al final y, los que dibujan, los mismos vértices, triángulos y copias:
+Los 10 DOLs dan el mismo estado que Dolphin antes de cada instrucción, el mismo estado de GX y el mismo EFB al final y, los que dibujan, los mismos vértices, triángulos y copias:
 
 | DOL | Instrucciones comparadas | Qué cubre |
 | --- | --- | --- |
@@ -108,6 +108,7 @@ Los 9 DOLs dan el mismo estado que Dolphin antes de cada instrucción, el mismo 
 | `gx_fifo` | 124 441 (completo), el estado de GX y 47 vértices | FIFO de GX, CP, PE (Fase 2, etapa A) |
 | `gx_tri` | 136 905 (completo), el estado de GX, 374 vértices y 254 triángulos | Vértices, luces y coordenadas de textura (Fase 2, etapa B) |
 | `gx_raster` | 252 690 (completo), el estado de GX, 1 649 vértices, 878 triángulos y 44 copias con el CRC del EFB | Recorte, culling, líneas y puntos (Fase 2, etapa C2); relleno, tijera, Z, mezcla, formatos, prueba de alfa, TEV, lectura del EFB y caja envolvente (C3) |
+| `gx_tex` | 611 772 (completo), el estado de GX, 416 vértices, 210 triángulos y 17 copias con el CRC del EFB | Texturas: los 11 formatos y las 3 paletas, envolturas, filtros, mipmaps, TMEM (Fase 2, etapa C4) |
 
 Lo que hubo que cambiar para llegar ahí:
 
@@ -128,7 +129,7 @@ Los dos errores del intérprete de Dolphin valen también para Dolphin sin parch
 
 ```bash
 make dolphin                 # una vez por sesión (~1 h con 2 núcleos)
-make dolphin-ref             # compara los 9 DOLs y regenera tests/dol/dolphin
+make dolphin-ref             # compara los 10 DOLs y regenera tests/dol/dolphin
 python3 tools/dolphin-trace/comparar.py tests/dol/bin/hw.dol          # uno solo
 python3 tools/trace_diff.py build/dolphin/trazas/hw.runner.huella build/dolphin/trazas/hw.dolphin.huella
 ```
