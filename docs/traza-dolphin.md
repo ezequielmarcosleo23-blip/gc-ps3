@@ -13,6 +13,7 @@ Los DOLs de prueba corren en el intérprete de gc-ps3 y en Dolphin (cf5cb7ef, co
 | `tools/trace_diff.py` | Compara dos huellas y muestra la primera instrucción distinta y qué registros cambian |
 | `tools/dolphin-trace/comparar.py` | Corre cada DOL en los dos con el mismo reloj, compara y, si son iguales, guarda la referencia (`make dolphin-ref`) |
 | `tests/dol/dolphin/*.txt` | Las referencias: la huella encadenada de Dolphin cada 65 536 instrucciones y al final |
+| `tests/dol/dolphin/*.gx.txt` | El estado de GX de Dolphin al final de la traza (ver abajo) |
 | `tests/unit/test_dolphin.c` | `make test` y el CI corren los DOLs y comparan con las referencias, sin Dolphin |
 
 ## Por qué paso a paso
@@ -51,13 +52,27 @@ La huella del estado es una ronda tipo xxHash por palabra, desde 0: `h = rotl64(
 
 Las huellas de 30 millones de instrucciones pesan unos 480 MB y quedan en `build/dolphin/trazas`; al repo van solo los puntos.
 
+## Estado de GX (Fase 2, D-042)
+
+La CPU no ve los registros de BP ni la memoria de XF, así que una traza igual no prueba que la GPU haya quedado igual. Al cortar la traza, el parche (con `GCPS3_ESTADO_GX=archivo`) y el runner (con `--estado-gx archivo`, después de atender los eventos de ese ciclo, como Dolphin en su `Advance`) escriben el mismo texto ([src/gx/estado.c](../src/gx/estado.c)):
+
+| Línea | Qué es | En Dolphin |
+| --- | --- | --- |
+| `fifo base/end/hi/lo/distancia/escritura/lectura/bp` | El FIFO que lee la GPU | `SCPFifoStruct` del CP |
+| `fifo banderas` | Lectura, breakpoint habilitado, su interrupción, breakpoint, interrupciones y estado de las marcas baja y alta, enlace (bits 0 a 8) | Los `bFF_*` |
+| `pi base/end/escritura` | El FIFO del lado de la CPU | `ProcessorInterface` |
+| `gp` | Bytes que quedaron en el gather pipe | `gather_pipe_ptr` |
+| `bp`, `cp`, `xf` | Las palabras distintas de cero | `bpmem`, `FillCPMemoryArray`, `xfmem` |
+
+`comparar.py` los compara después de la traza y con `--referencia` guarda el de Dolphin en `tests/dol/dolphin/<prueba>.gx.txt`; `test_dolphin.c` lo revisa cuando corre el DOL completo.
+
 ## Configuración de Dolphin
 
 `comparar.py` arranca Dolphin igual que el runner arranca la GameCube (D-032, D-036): intérprete, sin hilo de CPU aparte, IPL salteado, DSP HLE, región NTSC-U e inglés (sin esto Dolphin toma el país del sistema, y sin país usa PAL), sin tarjetas de memoria, mando estándar en el puerto 1 siempre conectado (`GCPadNew.ini` con `Always Connected`; sin dispositivos de entrada figuraría desenchufado) y los otros vacíos, reloj fijo (`EnableCustomRTC`, el mismo `--rtc` que el runner), video `Null`, sin audio y sin límite de velocidad. El `.map` del DOL va a `Maps/<prueba>.map` del usuario de Dolphin, así Dolphin engancha los mismos `OSReport` (ganchos al inicio: no cambian el estado).
 
-## Resultado (2026-10-23)
+## Resultado (2026-10-23; `gx_fifo` el 2026-10-24)
 
-Los 6 DOLs dan el mismo estado que Dolphin antes de cada instrucción:
+Los 7 DOLs dan el mismo estado que Dolphin antes de cada instrucción, y el mismo estado de GX al final:
 
 | DOL | Instrucciones comparadas | Qué cubre |
 | --- | --- | --- |
@@ -67,6 +82,7 @@ Los 6 DOLs dan el mismo estado que Dolphin antes de cada instrucción:
 | `hw` | 4 991 377 (completo) | PI, SI, EXI, ARAM, DSP, DI, AI |
 | `pantalla` | 30 000 000 | VI en 480i y el XFB |
 | `contador` | 30 000 000 | 3 interrupciones de video |
+| `gx_fifo` | 124 441 (completo) y el estado de GX | FIFO de GX, CP, PE (Fase 2, etapa A) |
 
 Lo que hubo que cambiar para llegar ahí:
 
@@ -85,7 +101,7 @@ Los dos errores del intérprete de Dolphin valen también para Dolphin sin parch
 
 ```bash
 make dolphin                 # una vez por sesión (~1 h con 2 núcleos)
-make dolphin-ref             # compara los 6 DOLs y regenera tests/dol/dolphin
+make dolphin-ref             # compara los 7 DOLs y regenera tests/dol/dolphin
 python3 tools/dolphin-trace/comparar.py tests/dol/bin/hw.dol          # uno solo
 python3 tools/trace_diff.py build/dolphin/trazas/hw.runner.huella build/dolphin/trazas/hw.dolphin.huella
 ```

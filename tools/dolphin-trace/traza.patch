@@ -1,5 +1,5 @@
 diff --git a/Source/Core/Core/PowerPC/Interpreter/Interpreter.cpp b/Source/Core/Core/PowerPC/Interpreter/Interpreter.cpp
-index affdc43936..2d1a6adec6 100644
+index affdc43936..6c2b19340a 100644
 --- a/Source/Core/Core/PowerPC/Interpreter/Interpreter.cpp
 +++ b/Source/Core/Core/PowerPC/Interpreter/Interpreter.cpp
 @@ -4,6 +4,8 @@
@@ -11,10 +11,21 @@ index affdc43936..2d1a6adec6 100644
  #include <string>
  
  #include <fmt/format.h>
-@@ -24,6 +26,159 @@
+@@ -18,11 +20,238 @@
+ #include "Core/Debugger/Debugger_SymbolMap.h"
+ #include "Core/HLE/HLE.h"
+ #include "Core/HW/CPU.h"
++#include "Core/HW/ProcessorInterface.h"
+ #include "Core/PowerPC/Interpreter/ExceptionUtils.h"
+ #include "Core/PowerPC/MMU.h"
+ #include "Core/PowerPC/PPCTables.h"
  #include "Core/PowerPC/PowerPC.h"
  #include "Core/System.h"
- 
++#include "VideoCommon/BPMemory.h"
++#include "VideoCommon/CPMemory.h"
++#include "VideoCommon/CommandProcessor.h"
++#include "VideoCommon/XFMemory.h"
++
 +// gc-ps3: traza de huellas para comparar con el intérprete de gc-ps3
 +// (tools/dolphin-trace y docs/traza-dolphin.md en gc-ps3). Se activa con
 +// GCPS3_HUELLA o GCPS3_PUNTOS; sin esas variables Dolphin corre como siempre.
@@ -24,6 +35,9 @@ index affdc43936..2d1a6adec6 100644
 +//                          en archivo.detalle
 +//   GCPS3_PUNTOS=archivo   la huella encadenada cada 65536 instrucciones y al final
 +//   GCPS3_LIMITE=N         sale de Dolphin después de N instrucciones
++//   GCPS3_ESTADO_GX=archivo  al salir, el estado de GX en texto (src/gx/estado.c
++//                          en gc-ps3): FIFO del CP y del PI, gather pipe y las
++//                          palabras distintas de cero de BP, CP y XF
 +// Con la traza activa el intérprete avanza instrucción por instrucción, como el
 +// paso a paso del depurador (SingleStep): 1 ciclo por instrucción y los eventos
 +// y las interrupciones entre una y otra, el mismo modelo que gc-ps3.
@@ -115,8 +129,74 @@ index affdc43936..2d1a6adec6 100644
 +  }
 +}
 +
++// El mismo texto que gc_gx_estado (gc-ps3, src/gx/estado.c)
++void EstadoGX(const char* path)
++{
++  FILE* f = std::fopen(path, "w");
++  if (!f)
++  {
++    std::fprintf(stderr, "gc-ps3: no se pudo crear %s\n", path);
++    return;
++  }
++  auto& system = Core::System::GetInstance();
++  const auto& fifo = system.GetCommandProcessor().GetFifo();
++  const auto& pi = system.GetProcessorInterface();
++  const auto& ppc = system.GetPPCState();
++  std::fprintf(f, "# gc-ps3 estado gx v1\n");
++  const u32 flags = u32(fifo.bFF_GPReadEnable.load() != 0) | u32(fifo.bFF_BPEnable.load() != 0) << 1 |
++                    u32(fifo.bFF_BPInt.load() != 0) << 2 | u32(fifo.bFF_Breakpoint.load() != 0) << 3 |
++                    u32(fifo.bFF_LoWatermarkInt.load() != 0) << 4 |
++                    u32(fifo.bFF_HiWatermarkInt.load() != 0) << 5 |
++                    u32(fifo.bFF_LoWatermark.load() != 0) << 6 |
++                    u32(fifo.bFF_HiWatermark.load() != 0) << 7 |
++                    u32(fifo.bFF_GPLinkEnable.load() != 0) << 8;
++  const struct
++  {
++    const char* name;
++    u32 v;
++  } regs[] = {
++      {"fifo base", fifo.CPBase.load()},
++      {"fifo end", fifo.CPEnd.load()},
++      {"fifo hi", fifo.CPHiWatermark},
++      {"fifo lo", fifo.CPLoWatermark},
++      {"fifo distancia", fifo.CPReadWriteDistance.load()},
++      {"fifo escritura", fifo.CPWritePointer.load()},
++      {"fifo lectura", fifo.CPReadPointer.load()},
++      {"fifo bp", fifo.CPBreakpoint.load()},
++      {"fifo banderas", flags},
++      {"pi base", pi.m_fifo_cpu_base},
++      {"pi end", pi.m_fifo_cpu_end},
++      {"pi escritura", pi.m_fifo_cpu_write_pointer},
++  };
++  for (const auto& r : regs)
++    std::fprintf(f, "%s %08x\n", r.name, r.v);
++  std::fprintf(f, "gp %u\n", static_cast<unsigned>(ppc.gather_pipe_ptr - ppc.gather_pipe_base_ptr));
++  const u32* bp = reinterpret_cast<const u32*>(&bpmem);
++  for (int k = 0; k < 256; k++)
++  {
++    if (bp[k])
++      std::fprintf(f, "bp %02x %08x\n", k, bp[k]);
++  }
++  u32 cp[256] = {};
++  g_main_cp_state.FillCPMemoryArray(cp);
++  for (int k = 0; k < 256; k++)
++  {
++    if (cp[k])
++      std::fprintf(f, "cp %02x %08x\n", k, cp[k]);
++  }
++  const u32* xf = reinterpret_cast<const u32*>(&xfmem);
++  for (u32 k = 0; k < XFMEM_REGISTERS_END; k++)
++  {
++    if (xf[k])
++      std::fprintf(f, "xf %04x %08x\n", k, xf[k]);
++  }
++  std::fclose(f);
++}
++
 +[[noreturn]] void Fin()
 +{
++  if (const char* gx = std::getenv("GCPS3_ESTADO_GX"))
++    EstadoGX(gx);
 +  if (s_trace.puntos && s_trace.n % PUNTOS_CADA != 0)
 +    std::fprintf(s_trace.puntos, "%llu %08x %016llx\n", static_cast<unsigned long long>(s_trace.n),
 +                 s_trace.last_pc, static_cast<unsigned long long>(s_trace.cadena));
@@ -167,11 +247,10 @@ index affdc43936..2d1a6adec6 100644
 +                 pc, static_cast<unsigned long long>(s_trace.cadena));
 +}
 +}  // namespace GCPS3Trace
-+
+ 
  namespace
  {
- // Determines whether or not the given instruction is one where its execution
-@@ -130,6 +285,8 @@ int Interpreter::SingleStepInner()
+@@ -130,6 +359,8 @@ int Interpreter::SingleStepInner()
  
    m_ppc_state.npc = m_ppc_state.pc + sizeof(UGeckoInstruction);
    m_prev_inst.hex = m_mmu.Read_Opcode(m_ppc_state.pc);
@@ -180,7 +259,7 @@ index affdc43936..2d1a6adec6 100644
  
    const GekkoOPInfo* opinfo = PPCTables::GetOpInfo(m_prev_inst, m_ppc_state.pc);
  
-@@ -230,6 +387,15 @@ void Interpreter::Run()
+@@ -230,6 +461,15 @@ void Interpreter::Run()
    auto& core_timing = m_system.GetCoreTiming();
    auto& cpu = m_system.GetCPU();
    auto& power_pc = m_system.GetPowerPC();

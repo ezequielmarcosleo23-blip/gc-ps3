@@ -210,6 +210,7 @@ static void test_timer(void)    { CHECK(run_program("timer", MAX_CYCLES, EXITS))
 static void test_pantalla(void) { CHECK(run_program("pantalla", 45000000u, STAYS)); }
 static void test_contador(void) { CHECK(run_program("contador", 90000000u, STAYS)); }
 static void test_hw(void)       { CHECK(run_program("hw", MAX_CYCLES, EXITS)); }
+static void test_gx_fifo(void)  { CHECK(run_program("gx_fifo", MAX_CYCLES, EXITS)); }
 
 const test_case_t program_tests[] = {
     { "dol hola: OSReport, printf con pila y va_list, puts (= salida en la PC)", test_hola },
@@ -218,5 +219,6 @@ const test_case_t program_tests[] = {
     { "dol pantalla: hola mundo en el XFB, VI 480i, CRC del cuadro mostrado", test_pantalla },
     { "dol contador: interrupción de VI en 0x500, 59,94 campos por segundo", test_contador },
     { "dol hw: PI, SI, reloj, SRAM y UART del IPL, ARAM, DSP, DI y AI", test_hw },
+    { "dol gx_fifo: FIFO de GX, marcas, display lists, tokens, breakpoint", test_gx_fifo },
     { NULL, NULL },
 };

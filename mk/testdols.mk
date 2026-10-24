@@ -15,10 +15,11 @@ DOL_CFLAGS := -std=c11 -mcpu=750 -mhard-float -O2 -ffreestanding -fno-builtin -f
               -fno-tree-loop-distribute-patterns -ffp-contract=off -Wall -Wextra -Werror \
               -Wa,-m750cl -Itests/dol
 DOL_LDFLAGS := -nostdlib -static -T tests/dol/link.ld -Wl,--build-id=none
-TESTDOLS    := hola cpu timer pantalla contador hw
+TESTDOLS    := hola cpu timer pantalla contador hw gx_fifo
 TESTDOLS_HOSTED := hola cpu pantalla       # los que también compilan en la PC
 DOL_VIDEO   := pantalla contador           # los que usan tests/dol/video.c
-TESTDOLS_EXIT := hola cpu timer hw         # terminan con exit(0)
+DOL_GXLIB   := gx_fifo                     # los que usan tests/dol/gxlib.c (Fase 2)
+TESTDOLS_EXIT := hola cpu timer hw gx_fifo # terminan con exit(0)
 TESTDOLS_STAY := pantalla contador         # se quedan mostrando algo
 
 DOL_OUT  := tests/dol/bin
@@ -37,7 +38,7 @@ dol-cc-check:
 	@command -v $(DOL_CC) >/dev/null 2>&1 || { \
 	  echo "Falta $(DOL_CC). En Ubuntu: sudo apt install -y gcc-powerpc-linux-gnu"; exit 1; }
 
-$(DOL_TMP)/%.o: tests/dol/%.c tests/dol/rt.h tests/dol/video.h | dol-cc-check
+$(DOL_TMP)/%.o: tests/dol/%.c tests/dol/rt.h tests/dol/video.h tests/dol/gxlib.h | dol-cc-check
 	@mkdir -p $(dir $@)
 	$(DOL_CC) $(DOL_CFLAGS) -c $< -o $@
 
@@ -49,6 +50,7 @@ $(DOL_TMP)/%.elf: $(DOL_RT) $(DOL_TMP)/%.o tests/dol/link.ld
 	$(DOL_CC) $(DOL_LDFLAGS) $(filter %.o,$^) -lgcc -o $@
 
 $(DOL_VIDEO:%=$(DOL_TMP)/%.elf): $(DOL_TMP)/video.o
+$(DOL_GXLIB:%=$(DOL_TMP)/%.elf): $(DOL_TMP)/gxlib.o
 
 $(DOL_OUT)/%.dol: $(DOL_TMP)/%.elf tools/elf2dol.py
 	@mkdir -p $(dir $@)

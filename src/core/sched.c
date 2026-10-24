@@ -39,6 +39,8 @@ int gc_sched_add(gc_sched_t *s, uint64_t when, const char *name, gc_event_fn fn,
         e->name = name;
         e->used = 1;
         s->count++;
+        if (s->limit && when < *s->limit)
+            *s->limit = when;
         return 0;
     }
     GC_LOGE("sched: tabla llena, se pierde el evento %s", name ? name : "?");

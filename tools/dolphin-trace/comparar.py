@@ -9,8 +9,10 @@ Por cada DOL: el runner corre con --huella (hasta exit() o --instrucciones),
 Dolphin corre la misma cantidad de instrucciones con el mismo reloj y la misma
 configuración del hardware (docs/traza-dolphin.md), y tools/trace_diff.py
 compara. Si difieren, repite las dos con el detalle de esas instrucciones y
-dice qué registros cambian. Con --referencia guarda los puntos de Dolphin en
-esa carpeta (tests/dol/dolphin), que es lo que revisa make test.
+dice qué registros cambian. Después compara el estado de GX que los dos dejan
+al final (FIFO, BP, CP y XF; la CPU no los ve). Con --referencia guarda los
+puntos y el estado de Dolphin en esa carpeta (tests/dol/dolphin), que es lo
+que revisa make test.
 
     python3 tools/dolphin-trace/comparar.py --dolphin build/dolphin/build/Binaries/dolphin-emu-nogui \\
         tests/dol/bin/hola.dol tests/dol/bin/cpu.dol
@@ -76,7 +78,7 @@ def drop_detail(base):
 def run_runner(runner, dol, rtc, limit, base, detalle=None):
     drop_detail(base)
     cmd = [runner, "--rtc", str(rtc), "--ciclos", str(limit), "--huella", base + ".huella",
-           "--puntos", base + ".puntos", dol]
+           "--puntos", base + ".puntos", "--estado-gx", base + ".gx", dol]
     if detalle:
         cmd[1:1] = ["--detalle", detalle]
     p = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
@@ -100,7 +102,7 @@ def run_dolphin(dolphin, dol, rtc, count, base, work, detalle=None):
     if os.path.exists(mapfile):
         shutil.copy(mapfile, os.path.join(user, "Maps", stem + ".map"))
     env = dict(os.environ, GCPS3_HUELLA=base + ".huella", GCPS3_PUNTOS=base + ".puntos",
-               GCPS3_LIMITE=str(count))
+               GCPS3_LIMITE=str(count), GCPS3_ESTADO_GX=base + ".gx")
     env.pop("GCPS3_DETALLE", None)
     if detalle:
         env["GCPS3_DETALLE"] = detalle
@@ -113,6 +115,28 @@ def run_dolphin(dolphin, dol, rtc, count, base, work, detalle=None):
     if "gc-ps3: huella de" not in p.stderr:
         raise RuntimeError(f"Dolphin no terminó la traza ({p.returncode}); ver {base}.log")
     return last_point(base + ".puntos")[0]
+
+
+def read_estado(path):
+    """Las líneas del estado de GX, sin comentarios."""
+    with open(path, encoding="utf-8") as f:
+        return [l.rstrip("\n") for l in f if l.strip() and not l.startswith("#")]
+
+
+def compare_estado(ra, da):
+    """Compara el estado de GX de las dos corridas; True si es el mismo."""
+    a, b = read_estado(ra + ".gx"), read_estado(da + ".gx")
+    if a == b:
+        print(f"   estado de GX igual ({len(a)} líneas)")
+        return True
+    only_a = [l for l in a if l not in b]
+    only_b = [l for l in b if l not in a]
+    print("   estado de GX DISTINTO:")
+    for l in only_a[:20]:
+        print(f"     runner : {l}")
+    for l in only_b[:20]:
+        print(f"     dolphin: {l}")
+    return False
 
 
 def compare(dol, o):
@@ -133,6 +157,8 @@ def compare(dol, o):
         return False
     if idx is not None:
         return False
+    if not compare_estado(ra, da):
+        return False
     if o.referencia:
         os.makedirs(o.referencia, exist_ok=True)
         out = os.path.join(o.referencia, stem + ".txt")
@@ -142,7 +168,12 @@ def compare(dol, o):
             f.write(f"# gc-ps3 huella v1: Dolphin cf5cb7ef paso a paso (tools/dolphin-trace)\n")
             f.write(f"# dol {stem}.dol\n# reloj {o.rtc}\n# instrucciones {m}\n")
             f.writelines(points)
-        print(f"   referencia en {os.path.relpath(out, ROOT)}")
+        gx = os.path.join(o.referencia, stem + ".gx.txt")
+        with open(gx, "w", encoding="utf-8") as f:
+            f.write(f"# gc-ps3 estado gx v1: Dolphin cf5cb7ef al final de la traza (tools/dolphin-trace)\n")
+            f.write(f"# dol {stem}.dol\n# reloj {o.rtc}\n# instrucciones {m}\n")
+            f.writelines(l + "\n" for l in read_estado(da + ".gx"))
+        print(f"   referencia en {os.path.relpath(out, ROOT)} y {os.path.relpath(gx, ROOT)}")
     return True
 
 

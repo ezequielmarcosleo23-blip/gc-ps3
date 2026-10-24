@@ -163,6 +163,7 @@ typedef struct gekko {
 
     uint32_t  illegal;         /* instrucciones no implementadas vistas */
     int       stop;            /* gekko_run vuelve antes (lo pone el HLE o quien corre) */
+    uint64_t  run_end;         /* gekko_run corre hasta este ciclo (el planificador lo acorta) */
     gc_mem_t *mem;
 
     /* Traza opcional: se llama con cada instrucción antes de ejecutarla. */
@@ -186,8 +187,8 @@ void gekko_reset(gekko_t *c, gc_mem_t *mem);
 /* Ejecuta una instrucción (y una excepción pendiente, si hay). */
 void gekko_step(gekko_t *c);
 
-/* Ejecuta hasta `cycles` instrucciones, o menos si se prende c->stop.
- * Devuelve las que ejecutó. */
+/* Ejecuta hasta `cycles` instrucciones, o menos si se prende c->stop o si
+ * algo baja c->run_end mientras corre. Devuelve las que ejecutó. */
 uint64_t gekko_run(gekko_t *c, uint64_t cycles);
 
 /* Línea de interrupción externa (la maneja el PI en la etapa D). */

@@ -12,11 +12,13 @@ El hardware de la GameCube alrededor de la CPU: cada bloque registra sus registr
 | `ai.h/.c` | Audio Interface (`0x0C006C00`) | Contador de muestras a 48 o 32 kHz con PSTAT, interrupción al llegar a AIIT, frecuencias de AIS y AID |
 | `di.h/.c` | DVD Interface (`0x0C006000`) | Sin disco: tapa abierta; Inquiry y RequestError contestan, las lecturas dan error de "sin medio"; cada comando tarda 300 µs |
 | `mi.h/.c` | Memory Interface (`0x0C004000`) | Registros de 16 bits que guardan lo escrito |
-| `gx.h/.c` | CP (`0x0C000000`), PE (`0x0C001000`) y FIFO de GX (`0x0C008000`) | Registros guardados con las máscaras de Dolphin; CP siempre ocioso; lo escrito en el FIFO se cuenta y se descarta hasta que haya GX |
+| `gpfifo.h/.c` | Write-gather pipe (`0x0C008000-0x0C008FFF`) | Junta lo que escribe la CPU y cada 32 bytes lo copia a la RAM en el puntero del FIFO del PI (vuelve a la base después del bloque de END); con el FIFO enlazado avisa al CP |
+| `cp.h/.c` | Command Processor (`0x0C000000`) | El FIFO que lee la GPU: base, fin, marcas alta y baja, distancia, punteros y breakpoint, con sus máscaras (LO 0xFFE0, HI 0x03FF); control, estado e interrupción del CP. Leer SR o la mitad alta de la distancia o del puntero de lectura corre la GPU en el acto. PI_FIFO_RESET lo deja enlazado y sin leer |
+| `pe.h/.c` | Pixel Engine (`0x0C001000`) | Configuración de Z y alfa, control y token. El token (BP 0x47, 0x48) y "draw done" (BP 0x45) cambian max(500, ciclos) después de que la GPU los lee, con sus interrupciones |
 
 ## Cómo se arma
 
-`gc_system_init` registra los bloques una vez; `gc_system_hle_boot` los deja con los valores de encendido de Dolphin (PI con la causa VI prendida, VI con los tiempos de `Preset`, AI a 48/32 kHz, DSP detenido con DSPInit, DVD con la tapa abierta) y agenda la primera media línea y el DMA de audio. El campo que termina se informa con `gc_vi_field_t` (dirección, ancho, separación entre líneas y alto) y la VI guarda el último de cada paridad: con esos dos `src/core/xfb.c` arma el cuadro RGB que guarda el runner (`--imagen`) y que va a mostrar la app de PS3. El estado del mando está en `gc_si_t.pad`: la plataforma lo va a llenar cuando haya entrada.
+`gc_system_init` registra los bloques una vez (el lado de la GPU, que lee el FIFO, está en [src/gx](../gx/README.md)); `gc_system_hle_boot` los deja con los valores de encendido de Dolphin (PI con la causa VI prendida, VI con los tiempos de `Preset`, AI a 48/32 kHz, DSP detenido con DSPInit, DVD con la tapa abierta) y agenda la primera media línea y el DMA de audio. El campo que termina se informa con `gc_vi_field_t` (dirección, ancho, separación entre líneas y alto) y la VI guarda el último de cada paridad: con esos dos `src/core/xfb.c` arma el cuadro RGB que guarda el runner (`--imagen`) y que va a mostrar la app de PS3. El estado del mando está en `gc_si_t.pad`: la plataforma lo va a llenar cuando haya entrada.
 
 ## Tiempos
 
@@ -41,7 +43,13 @@ Ciclos por media línea = 2 × 486 MHz / reloj de VI × HLW (429). Un campo de 4
 - Un comando del SI que el mando no termina (0x1D o uno desconocido) queda en curso; Dolphin lo reintenta sin fin en el mismo ciclo.
 - La ROM del IPL no está (D-005): sus lecturas dan 0, sin el texto de copyright ni las fuentes.
 - El DSP no carga microcódigos (llega con el audio); sin ajuste de velocidad, sin salida temprana del XFB ni dispositivos de Triforce o Wii.
+- GX con un solo hilo, como Dolphin sin "dual core"; las métricas del CP dan 0 y la caja envolvente y los contadores del PE, 0 (Dolphin con el video Null).
+
+## Diferencias con el hardware (heredadas de Dolphin)
+
+- El puntero de escritura del FIFO del PI no tiene el bit de vuelta (bit 26).
+- El tiempo de la GPU es el modelo de Dolphin (D-042): eventos de 1000 ciclos, un costo fijo por comando y al menos 500 ciclos para el token, no el de Flipper.
 
 ## Pruebas
 
-`tests/unit/test_hw.c` (PI y VI), `tests/unit/test_hw_io.c` (SI, EXI, DSP y ARAM, AI, DI, MI, CP, PE y FIFO) y los DOLs `pantalla`, `contador` y `hw` de [tests/dol](../../tests/dol/README.md).
+`tests/unit/test_hw.c` (PI y VI), `tests/unit/test_hw_io.c` (SI, EXI, DSP y ARAM, AI, DI y MI), `tests/unit/test_gx.c` (gather pipe, CP, PE y el lado de la GPU) y los DOLs `pantalla`, `contador`, `hw` y `gx_fifo` de [tests/dol](../../tests/dol/README.md).

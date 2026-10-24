@@ -1,0 +1,21 @@
+gx_fifo: FIFO de GX, Command Processor y Pixel Engine
+gx_fifo: encendido: CP SR 000c CR 0000, PE ctrl 0000 token 0000
+gx_fifo: encendido: CP base 00000000 fin 00000000 distancia 00000000, PI 00000000 00000000 00000000
+gx_fifo: FIFO de 4096 bytes, CR 0011, PI escritura +0
+gx_fifo: comandos: 1 lecturas de SR, lectura +576 escritura +576, distancia 0
+gx_fifo: vueltas: 27600 bytes, 6 vueltas, 1 esperas, lectura +3648
+gx_fifo: marcas: 7 desbordes y 7 vaciados, distancia maxima 2112, SR 0000 y 0002
+gx_fifo: display lists: 3 llamadas de 96 bytes
+gx_fifo: cargas indexadas: 4 (matriz, normal, post, luz)
+gx_fifo: primitivas: 4 (3, 40, 4 y 0 vertices) y 3 opcodes desconocidos
+gx_fifo: token 1234 sin interrupcion: 155 lecturas, 62 ticks
+gx_fifo: token beef con interrupcion: a los 128 ticks, INTSR 00000200
+gx_fifo: token atendido: INTSR 00000000
+gx_fifo: dos tokens: 2222, 1 interrupcion
+gx_fifo: draw done a los 128 ticks, INTSR 00000000
+gx_fifo: token 3333 despues de una lista larga: a los 599 ticks
+gx_fifo: breakpoint en +3360: SR 001a, lectura +3360, distancia 128
+gx_fifo: breakpoint apagado: 1 lecturas de SR, SR 000e, INTSR 00000000
+gx_fifo: PI_FIFO_RESET: CR 0010, marca alta 03ffffe0, baja 00000000
+gx_fifo: FIFO de nuevo: lectura +32, SR 000e
+gx_fifo: 19 interrupciones; OK

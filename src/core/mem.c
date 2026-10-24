@@ -190,3 +190,11 @@ uint8_t *gc_ram_ptr(gc_mem_t *m, uint32_t addr, uint32_t len)
         return NULL;
     return m->ram + phys;
 }
+
+uint8_t *gc_ram_phys(gc_mem_t *m, uint32_t addr, uint32_t len)
+{
+    addr &= 0x3FFFFFFFu;
+    if (addr >= GC_RAM_SIZE || len > GC_RAM_SIZE - addr)
+        return NULL;
+    return m->ram + addr;
+}

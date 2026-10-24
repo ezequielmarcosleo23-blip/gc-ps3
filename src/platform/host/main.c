@@ -60,6 +60,7 @@ static void usage(FILE *out, const char *argv0)
             "  --huella ARCHIVO pc, instruccion y huella del estado de cada paso (binario)\n"
             "  --detalle D:H    con --huella: estado completo de los pasos D a H-1\n"
             "  --puntos ARCHIVO huella encadenada cada 65536 pasos y al final\n"
+            "  --estado-gx ARCHIVO  al terminar, el estado de GX en texto (FIFO, BP, CP, XF)\n"
             "  --version, --help\n",
             argv0, (unsigned)DEFAULT_CYCLES);
 }
@@ -143,6 +144,25 @@ static void trace_line(void *ctx, uint32_t pc, uint32_t inst)
         huella_step(pc, inst);
 }
 
+static void estado_line(void *ctx, const char *text)
+{
+    fprintf(ctx, "%s\n", text);
+}
+
+/* --estado-gx: como Dolphin al cortar la traza, con los eventos de este ciclo
+ * ya atendidos (docs/traza-dolphin.md). -1 si no se pudo escribir. */
+static int write_estado_gx(const char *path)
+{
+    gc_sched_dispatch(&sys.sched, sys.cpu.cycles);
+    FILE *f = fopen(path, "w");
+    if (!f) {
+        fprintf(stderr, "runner: no se pudo crear %s\n", path);
+        return -1;
+    }
+    gc_gx_estado(&sys, estado_line, f);
+    return (ferror(f) | fclose(f)) != 0 ? -1 : 0;
+}
+
 static void report_line(void *ctx, const char *line)
 {
     (void)ctx;
@@ -224,7 +244,7 @@ int main(int argc, char **argv)
 {
     uint64_t cycles = DEFAULT_CYCLES;
     const char *dol_path = NULL, *trace_path = NULL, *map_path = NULL, *image_path = NULL;
-    const char *huella_path = NULL, *puntos_path = NULL, *detalle = NULL;
+    const char *huella_path = NULL, *puntos_path = NULL, *detalle = NULL, *estado_path = NULL;
     gc_boot_config_t cfg = { 0, 0 };
     int have_rtc = 0, list_frames = 0;
 
@@ -273,6 +293,12 @@ int main(int argc, char **argv)
                 puntos_path = argv[i];
             else
                 detalle = argv[i];
+        } else if (strcmp(a, "--estado-gx") == 0) {
+            if (++i >= argc) {
+                fprintf(stderr, "--estado-gx necesita un archivo\n");
+                return 2;
+            }
+            estado_path = argv[i];
         } else if (strcmp(a, "--pal") == 0) {
             cfg.pal = 1;
         } else if (strcmp(a, "--rtc") == 0) {
@@ -415,11 +441,12 @@ int main(int argc, char **argv)
         fprintf(stderr, "runner: %llu campos de video, ninguno con XFB\n",
                 (unsigned long long)sys.vi.fields);
     const int image_failed = report_frame(image_path) != 0;
+    const int estado_failed = estado_path && write_estado_gx(estado_path) != 0;
     const int code = sys.hle.exited ? (int)(sys.hle.exit_code & 0xFFu) : 0;
     if (sys.hle.exited)
         fprintf(stderr, "runner: el programa termino con exit(%d)\n", (int)sys.hle.exit_code);
     else
         fprintf(stderr, "runner: se acabaron los ciclos sin exit\n");
     gc_system_free(&sys);
-    return image_failed || huella_failed ? 1 : code;
+    return image_failed || huella_failed || estado_failed ? 1 : code;
 }

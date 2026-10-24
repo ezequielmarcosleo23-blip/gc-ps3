@@ -1,0 +1,18 @@
+# gc-ps3 estado gx v1: Dolphin cf5cb7ef al final de la traza (tools/dolphin-trace)
+# dol cpu.dol
+# reloj 845791192
+# instrucciones 673867
+fifo base 00000000
+fifo end 00000000
+fifo hi 00000000
+fifo lo 00000000
+fifo distancia 00000000
+fifo escritura 00000000
+fifo lectura 00000000
+fifo bp 00000000
+fifo banderas 00000000
+pi base 00000000
+pi end 00000000
+pi escritura 00000000
+gp 0
+bp fe 00ffffff

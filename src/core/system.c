@@ -60,6 +60,9 @@ static void reset_hardware(gc_system_t *s, int pal)
     gc_ai_reset(&s->ai);
     gc_dsp_reset(&s->dsp);
     gc_di_reset(&s->di);
+    gc_gpfifo_reset(&s->gpfifo);
+    gc_cp_reset(&s->cp);
+    gc_pe_reset(&s->pe);
     gc_gx_reset(&s->gx);
 }
 
@@ -68,10 +71,15 @@ int gc_system_init(gc_system_t *s)
     memset(s, 0, sizeof *s);
     if (gc_mem_init(&s->mem) != 0)
         return -1;
+    if (gc_gx_init(&s->gx, s) != 0) {
+        gc_mem_free(&s->mem);
+        return -1;
+    }
     gekko_reset(&s->cpu, &s->mem);
     s->cpu.hle = gc_hle_dispatch;
     s->cpu.hle_ctx = s;
     gc_sched_init(&s->sched);
+    s->sched.limit = &s->cpu.run_end;
     gc_hle_reset(&s->hle);
     gc_pi_init(&s->pi, s);
     gc_vi_init(&s->vi, s);
@@ -81,13 +89,16 @@ int gc_system_init(gc_system_t *s)
     gc_ai_init(&s->ai, s);
     gc_dsp_init(&s->dsp, s);
     gc_di_init(&s->di, s);
-    gc_gx_init(&s->gx, s);
+    gc_gpfifo_init(&s->gpfifo, s);
+    gc_cp_init(&s->cp, s);
+    gc_pe_init(&s->pe, s);
     reset_hardware(s, 0);
     return 0;
 }
 
 void gc_system_free(gc_system_t *s)
 {
+    gc_gx_free(&s->gx);
     gc_mem_free(&s->mem);
 }
 
@@ -101,6 +112,7 @@ void gc_system_hle_boot(gc_system_t *s, const gc_boot_config_t *cfg, uint32_t en
     c->hle = gc_hle_dispatch;
     c->hle_ctx = s;
     gc_sched_init(&s->sched);
+    s->sched.limit = &s->cpu.run_end;
     gc_hle_reset(&s->hle);
     s->rtc_boot = cfg ? cfg->rtc : 0;
     reset_hardware(s, cfg && cfg->pal);

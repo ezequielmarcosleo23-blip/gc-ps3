@@ -36,12 +36,15 @@
 #include "core/mem.h"
 #include "core/sched.h"
 #include "cpu/gekko.h"
+#include "gx/gx.h"
 #include "hw/ai.h"
+#include "hw/cp.h"
 #include "hw/di.h"
 #include "hw/dsp.h"
 #include "hw/exi.h"
-#include "hw/gx.h"
+#include "hw/gpfifo.h"
 #include "hw/mi.h"
+#include "hw/pe.h"
 #include "hw/pi.h"
 #include "hw/si.h"
 #include "hw/vi.h"
@@ -70,7 +73,10 @@ typedef struct gc_system {
     gc_ai_t    ai;
     gc_dsp_t   dsp;
     gc_di_t    di;
-    gc_gx_t    gx;
+    gc_gpfifo_t gpfifo;                /* write-gather pipe (0x0C008000) */
+    gc_cp_t    cp;                     /* Command Processor: registros y FIFO de GX */
+    gc_pe_t    pe;                     /* Pixel Engine: token y "draw done" */
+    gc_gx_t    gx;                     /* la GPU: lector de comandos y estado de BP, CP y XF */
     uint64_t   rtc_boot;               /* segundos desde 2000 al arrancar (reloj del IPL) */
 } gc_system_t;
 

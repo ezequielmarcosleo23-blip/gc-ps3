@@ -2,7 +2,7 @@
 
 Emulador de GameCube para PlayStation 3, escrito en C11 sobre [PSL1GHT](https://github.com/ps3dev/PSL1GHT) y el toolchain abierto de [ps3dev](https://github.com/ps3dev/ps3dev). Sin SDK ni herramientas de Sony.
 
-> **Estado: Fase 1.** La Fase 0 (JIT, SPU, RSX, E/S y log por red) está validada en RPCS3 y espera la consola para el JIT y el rendimiento ([docs/fase0.md](docs/fase0.md)). La Fase 1 (memoria, intérprete de Gekko, hardware mínimo e imagen en la PS3) cumplió su criterio de salida: la app corre DOLs propios en RPCS3 igual que el runner, y el intérprete da el mismo estado que Dolphin instrucción por instrucción ([docs/fase1.md](docs/fase1.md), [docs/app-ps3.md](docs/app-ps3.md), [docs/traza-dolphin.md](docs/traza-dolphin.md)). La Fase 2 lleva GX al RSX ([docs/fase2.md](docs/fase2.md)).
+> **Estado: Fase 2.** La Fase 0 (JIT, SPU, RSX, E/S y log por red) está validada en RPCS3 y espera la consola para el JIT y el rendimiento ([docs/fase0.md](docs/fase0.md)). La Fase 1 (memoria, intérprete de Gekko, hardware mínimo e imagen en la PS3) cumplió su criterio de salida: la app corre DOLs propios en RPCS3 igual que el runner, y el intérprete da el mismo estado que Dolphin instrucción por instrucción ([docs/fase1.md](docs/fase1.md), [docs/app-ps3.md](docs/app-ps3.md), [docs/traza-dolphin.md](docs/traza-dolphin.md)). La Fase 2 lleva GX al RSX ([docs/fase2.md](docs/fase2.md)): la etapa A (FIFO de GX, Command Processor y Pixel Engine) está completa e igual a Dolphin.
 
 ## Compilar
 
@@ -32,8 +32,8 @@ make docker-make     # compila todo dentro de la imagen Docker, igual que el CI
 ```
 src/core/            memoria, MMIO, scheduler, DVD, arranque HLE (portable)
 src/cpu/             intérprete de Gekko (el JIT después)
-src/hw/              hardware alrededor de la CPU: PI, VI, SI, EXI, DSP, AI, DI, MI y GX sin gráficos (portable)
-src/gx/              Command Processor, BP/XF/TEV (portable)
+src/hw/              hardware alrededor de la CPU: PI, VI, SI, EXI, DSP, AI, DI, MI, gather pipe, CP y PE (portable)
+src/gx/              la GPU: FIFO de GX, comandos y estado de BP, CP y XF (portable)
 src/dsp/             HLE de AX
 src/spu/             programas SPE (cada carpeta es un programa)
 src/platform/ps3/    código específico de la PS3

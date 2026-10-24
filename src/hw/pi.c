@@ -75,7 +75,15 @@ static void write32(gc_pi_t *pi, uint32_t off, uint32_t v)
     case PI_FIFO_BASE:    pi->fifo_base = v & GX_ADDR_MASK; break;
     case PI_FIFO_END:     pi->fifo_end = v & GX_ADDR_MASK; break;
     case PI_FIFO_WPTR:    pi->fifo_wptr = v & GX_ADDR_MASK; break;
-    case PI_FIFO_RESET:   break;                                  /* GX: después de la Fase 1 */
+    case PI_FIFO_RESET:
+        /* GXAbortFrame: vacía el gather pipe, deja el CP enlazado y sin leer,
+         * y descarta lo que la GPU tenía a medio leer (Dolphin) */
+        if (v & 1u) {
+            gc_gpfifo_reset(&pi->sys->gpfifo);
+            gc_cp_reset_fifo(&pi->sys->cp);
+            gc_gx_reset_video_buffer(&pi->sys->gx);
+        }
+        break;
     case PI_ERROR_CAUSE:  pi->error_cause = v & 7u; break;
     case PI_RESET_CODE:   pi->reset_code = v; break;
     case PI_UNKNOWN:      pi->unknown = v & 0x3FFu; break;

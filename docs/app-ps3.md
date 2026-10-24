@@ -49,7 +49,7 @@ Lo que se espera: `pantalla` con un solo cuadro de CRC `0x10589e8c`; `contador` 
 
 ## Probada en la PC
 
-`make test-app` (también corre en `make test` y en el CI) compila `main.c` en la PC con versiones de prueba de lv2, el mando, rsxkit y el log (`tests/appsim/stubs.c`) y la corre con un guion de botones (`tests/appsim/run.py`): baja por el menú, corre `contador`, `cpu`, `hw`, `pantalla` y `timer`, entra dos veces al menú del sistema y el sistema la cierra con `timer` corriendo. El reloj de microsegundos avanza fijo, así que cada cuadro de la PS3 corre 3 millones de ciclos y el log sale siempre igual. Se revisa:
+`make test-app` (también corre en `make test` y en el CI) compila `main.c` en la PC con versiones de prueba de lv2, el mando, rsxkit y el log (`tests/appsim/stubs.c`) y la corre con un guion de botones (`tests/appsim/run.py`): baja por el menú, corre `contador`, `cpu`, `gx_fifo`, `hw`, `pantalla` y `timer`, entra dos veces al menú del sistema y el sistema la cierra con `timer` corriendo. El reloj de microsegundos avanza fijo, así que cada cuadro de la PS3 corre 3 millones de ciclos y el log sale siempre igual. Se revisa:
 
 - `tools/compare_log.py`: las cinco corridas iguales al runner;
 - el `exit(0)` de `cpu`, `hw` y `timer`, el cuadro de `pantalla` (`0x10589e8c`) y varios de `contador`;

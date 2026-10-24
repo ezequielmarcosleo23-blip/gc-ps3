@@ -6,12 +6,12 @@
 """Corre la app de PS3 simulada en la PC (make test-app) y revisa su log.
 
 La app (build/host/appsim/gc-ps3-appsim, ver tests/appsim/stubs.c) recorre el
-menú con un guion de botones y la palanca: contador, cpu, hw, pantalla y timer,
+menú con un guion de botones y la palanca: contador, cpu, gx_fifo, hw, pantalla y timer,
 con dos vueltas por el menú del sistema y un cierre desde el sistema con timer
 corriendo. Con el reloj fijo el log sale siempre igual. Se revisa:
 
   - tools/compare_log.py: cada corrida igual al runner (salida y cuadros);
-  - el orden de las corridas y el exit(0) de cpu, hw y timer;
+  - el orden de las corridas y el exit(0) de cpu, gx_fifo, hw y timer;
   - el cuadro de pantalla (CRC 0x10589e8c) y varios cuadros de contador;
   - que cada cuadro avisado se subió a rsxkit y que la subida (XRGB8888,
     vuelta a RGB) tiene el mismo CRC;
@@ -35,7 +35,7 @@ import compare_log  # noqa: E402
 
 UP, DOWN, CROSS, CIRCLE = 0x10, 0x40, 0x4000, 0x2000
 STICK_DOWN = "lyff"               # palanca izquierda abajo del todo
-# Menú, por nombre: contador, cpu, hola, hw, pantalla, timer (de ./dol) y
+# Menú, por nombre: contador, cpu, gx_fifo, hola, hw, pantalla, timer (de ./dol) y
 # zeta (de /dev_hdd0/gcps3/dol, donde también hay un hola.dol repetido).
 # Cada cuadro de la PS3 corre 3 millones de ciclos (15 tramos de 200 000). Un
 # botón en cuadros seguidos es uno solo apretado; (desde, hasta) lo mantiene.
@@ -45,22 +45,24 @@ SCRIPT = [
     (20, CIRCLE),
     (22, DOWN), (24, CROSS),      # cpu
     (28, CIRCLE),
-    (30, STICK_DOWN), (32, STICK_DOWN),   # hola y hw con la palanca
-    (34, CROSS),                  # hw
-    (38, "xmb"),                  # menú del sistema con hw ya terminado
-    (40, CIRCLE),
-    ((46, 47), DOWN),             # pantalla: dos cuadros mantenido, baja uno
-    (48, CROSS),                  # pantalla, 13 cuadros
-    (56, "xmb"),                  # menú del sistema con pantalla corriendo
-    (62, CIRCLE),
-    ((64, 99), DOWN),             # timer al apretar; repite en el 93 (zeta) y en
-                                  # el 99 ya está abajo
-    (102, UP),                    # timer
-    (104, CROSS),
-    (108, "salir"),               # el sistema cierra la app con timer corriendo
+    (30, DOWN), (32, CROSS),      # gx_fifo
+    (36, CIRCLE),
+    (38, STICK_DOWN), (40, STICK_DOWN),   # hola y hw con la palanca
+    (42, CROSS),                  # hw
+    (46, "xmb"),                  # menú del sistema con hw ya terminado
+    (48, CIRCLE),
+    ((54, 55), DOWN),             # pantalla: dos cuadros mantenido, baja uno
+    (56, CROSS),                  # pantalla, 13 cuadros
+    (64, "xmb"),                  # menú del sistema con pantalla corriendo
+    (70, CIRCLE),
+    ((72, 107), DOWN),            # timer al apretar; repite en el 101 (zeta) y en
+                                  # el 107 ya está abajo
+    (110, UP),                    # timer
+    (112, CROSS),
+    (116, "salir"),               # el sistema cierra la app con timer corriendo
 ]
 RELOJ = 1792475992                # 845791192 segundos desde 2000
-RUNS = ["contador.dol", "cpu.dol", "hw.dol", "pantalla.dol", "timer.dol"]
+RUNS = ["contador.dol", "cpu.dol", "gx_fifo.dol", "hw.dol", "pantalla.dol", "timer.dol"]
 PANTALLA_CRC = "0x10589e8c"
 
 FRAME_CRC = re.compile(r"^app: cuadro \d+ \(campo \d+\) (\d+x\d+), crc32 RGB (0x[0-9a-f]{8})$")
@@ -117,7 +119,7 @@ def main():
     runs = list(compare_log.runs(log))
     by_name = {r["name"]: r for r in runs}
     check([r["name"] for r in runs] == RUNS, "corridas " + " ".join(r["name"] for r in runs))
-    for name in ("cpu.dol", "hw.dol", "timer.dol"):
+    for name in ("cpu.dol", "gx_fifo.dol", "hw.dol", "timer.dol"):
         check(f"app: {name} termino con exit(0)" in log, f"{name} sin exit(0)")
     pantalla = by_name.get("pantalla.dol", {}).get("frames", [])
     check(len(pantalla) == 1 and pantalla[0].endswith(PANTALLA_CRC), f"cuadros de pantalla {pantalla}")
@@ -134,8 +136,8 @@ def main():
     last = SCRIPT[-1][0]
     check(len(stats) == 1 and int(stats[0].group(1)) == last + 1, f"no salió en el cuadro {last} (EXIT_GAME)")
     check(log[-1:] == ["app: salida"], "no terminó con \"app: salida\"")
-    check("app: 6 DOLs en ./dol" in log and "app: 1 DOLs en /dev_hdd0/gcps3/dol" in log,
-          "no listó 6 DOLs en ./dol y 1 (sin el repetido) en /dev_hdd0/gcps3/dol")
+    check("app: 7 DOLs en ./dol" in log and "app: 1 DOLs en /dev_hdd0/gcps3/dol" in log,
+          "no listó 7 DOLs en ./dol y 1 (sin el repetido) en /dev_hdd0/gcps3/dol")
     check("app: mando en el puerto 1" in log, "no avisó el mando")
 
     if bad:

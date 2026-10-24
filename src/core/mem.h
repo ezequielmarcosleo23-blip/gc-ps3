@@ -94,4 +94,9 @@ void     gc_write64(gc_mem_t *m, uint32_t addr, uint64_t v);
  * 24 MB reales; NULL si el tramo no es RAM. Para cargadores y DMA. */
 uint8_t *gc_ram_ptr(gc_mem_t *m, uint32_t addr, uint32_t len);
 
+/* Como lo ve el hardware de video (y Dolphin, Memmap::GetPointerForRange):
+ * los 2 bits de arriba no cuentan y el tramo tiene que caber en los 24 MB.
+ * NULL si no. Para el FIFO de GX, las display lists y los arreglos. */
+uint8_t *gc_ram_phys(gc_mem_t *m, uint32_t addr, uint32_t len);
+
 #endif

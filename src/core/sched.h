@@ -51,11 +51,18 @@ typedef struct gc_sched {
     gc_event_t ev[GC_SCHED_MAX];
     uint64_t   seq;
     uint32_t   count;
+    /* Fin del tramo que está corriendo la CPU (gekko_t.run_end), o NULL. Un
+     * evento agregado para antes lo acorta: así un registro que agenda algo a
+     * pocos ciclos (GX: 0, 500, 1000) lo ve atendido a tiempo, entre una
+     * instrucción y la siguiente, como en Dolphin. */
+    uint64_t  *limit;
 } gc_sched_t;
 
+/* Vacía la tabla (limit queda en NULL). */
 void gc_sched_init(gc_sched_t *s);
 
-/* Programa fn(ctx) para el ciclo `when`. 0 o -1 si la tabla está llena. */
+/* Programa fn(ctx) para el ciclo `when` (y acorta el tramo de la CPU si hace
+ * falta). 0 o -1 si la tabla está llena. */
 int gc_sched_add(gc_sched_t *s, uint64_t when, const char *name, gc_event_fn fn, void *ctx);
 
 /* Quita todos los eventos pendientes con esa función y contexto. Devuelve cuántos. */

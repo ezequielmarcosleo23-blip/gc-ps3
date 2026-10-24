@@ -17,7 +17,7 @@
  * with this program; if not, see <https://www.gnu.org/licenses/>.
  */
 
-/* SI, EXI (IPL), DSP y ARAM, AI, DI, MI, CP/PE y el FIFO de GX. */
+/* SI, EXI (IPL), DSP y ARAM, AI, DI y MI (CP, PE y el FIFO de GX: test_gx.c). */
 #include <string.h>
 
 #include "core/log.h"
@@ -426,9 +426,9 @@ static void test_di(void)
     teardown();
 }
 
-/* ---- MI, CP, PE y el FIFO de GX ------------------------------------------------------- */
+/* ---- MI (CP, PE y el FIFO de GX están en test_gx.c) ---------------------------------- */
 
-static void test_mi_gx(void)
+static void test_mi(void)
 {
     CHECK(boot() == 0);
     w32(0x4000, 0x12345678u);                          /* región 0 */
@@ -437,22 +437,6 @@ static void test_mi_gx(void)
     CHECK_EQ_U64(r16(0x401C), 0x00FF);
     w16(0x4012, 0x1111);                               /* no existe */
     CHECK_EQ_U64(r16(0x4012), 0);
-
-    CHECK_EQ_U64(r16(0x0000), CP_SR_IDLE);
-    w16(0x0020, 0xFFFF);                               /* base del FIFO: alineada a 32 */
-    w16(0x0022, 0xFFFF);
-    CHECK_EQ_U64(r32(0x0020), 0xFFE003FFu);
-    w16(0x0002, 0x0011);
-    CHECK_EQ_U64(r16(0x0002), 0x0011);
-
-    w16(0x100A, 0x000F);                               /* PE: TOKEN y FINISH solo se escriben */
-    CHECK_EQ_U64(r16(0x100A), 0x0003);
-    CHECK(!pi_cause(PI_INT_PE_TOKEN | PI_INT_PE_FINISH | PI_INT_CP));
-
-    for (int k = 0; k < 8; k++)
-        w32(0x8000, 0x61000000u + (uint32_t)k);
-    gc_write8(&sys.mem, IO + 0x8000, 0x61);
-    CHECK_EQ_U64(sys.gx.fifo_bytes, 33);
     teardown();
 }
 
@@ -466,6 +450,6 @@ const test_case_t hw_io_tests[] = {
     { "dsp: DMA de audio por bloques y AID", test_dsp_audio_dma },
     { "ai: contador de muestras, AIIT, parar y reiniciar", test_ai },
     { "di: sin disco, Inquiry, lectura con error y RequestError", test_di },
-    { "mi, cp, pe y FIFO de GX: registros guardados y bytes contados", test_mi_gx },
+    { "mi: registros guardados", test_mi },
     { NULL, NULL },
 };

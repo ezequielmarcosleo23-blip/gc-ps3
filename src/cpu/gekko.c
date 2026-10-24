@@ -285,8 +285,9 @@ void gekko_step(gekko_t *c)
 uint64_t gekko_run(gekko_t *c, uint64_t cycles)
 {
     const uint64_t start = c->cycles;
+    c->run_end = start + cycles;
     gekko_fpu_sync(c);                      /* el redondeo del Gekko, mientras corre */
-    while (c->cycles - start < cycles && !c->stop)
+    while (c->cycles < c->run_end && !c->stop)
         gekko_step(c);
     fpu_host_round(0);                      /* el resto del emulador, al más cercano */
     return c->cycles - start;

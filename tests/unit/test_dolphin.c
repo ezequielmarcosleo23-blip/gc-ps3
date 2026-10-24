@@ -24,8 +24,11 @@
  * lo mismo que el Dolphin parchado en cada punto (cada 65 536 instrucciones y
  * al final). Las referencias las genera tools/dolphin-trace/comparar.py.
  *
+ * Si hay tests/dol/dolphin/<prueba>.gx.txt, el estado de GX al final (FIFO,
+ * BP, CP y XF, src/gx/estado.c) también tiene que ser el de Dolphin.
+ *
  * GCPS3_REF_MAX=N revisa solo hasta la instrucción N (make test-be, que corre
- * en QEMU, usa 2 millones).
+ * en QEMU, usa 2 millones); entonces no se mira el estado de GX.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -76,6 +79,63 @@ static void step(void *ctx, uint32_t pc, uint32_t inst)
     }
 }
 
+/* ---- estado de GX al final ---- */
+
+#define ESTADO_MAX (256u * 1024u)
+
+static char estado[ESTADO_MAX];
+static size_t estado_len;
+
+static void estado_line(void *ctx, const char *text)
+{
+    (void)ctx;
+    const size_t n = strlen(text);
+    if (text[0] != '#' && estado_len + n + 2 < ESTADO_MAX) {
+        memcpy(estado + estado_len, text, n);
+        estado_len += n;
+        estado[estado_len++] = '\n';
+        estado[estado_len] = '\0';
+    }
+}
+
+/* 1 si no hay referencia o si el estado es el de Dolphin */
+static int check_estado(const char *name)
+{
+    char path[256], line[256];
+    snprintf(path, sizeof path, "tests/dol/dolphin/%s.gx.txt", name);
+    FILE *f = fopen(path, "r");
+    if (!f)
+        return 1;
+    static char want[ESTADO_MAX];
+    size_t want_len = 0;
+    while (fgets(line, sizeof line, f)) {
+        const size_t n = strlen(line);
+        if (line[0] != '#' && want_len + n + 1 < ESTADO_MAX) {
+            memcpy(want + want_len, line, n);
+            want_len += n;
+        }
+    }
+    want[want_len] = '\0';
+    fclose(f);
+
+    /* Como el runner con --estado-gx: con los eventos de este ciclo atendidos */
+    gc_sched_dispatch(&sys.sched, sys.cpu.cycles);
+    estado_len = 0;
+    estado[0] = '\0';
+    gc_gx_estado(&sys, estado_line, NULL);
+    if (strcmp(estado, want) == 0)
+        return 1;
+    size_t k = 0, at = 0;
+    while (estado[k] && estado[k] == want[k]) {
+        if (estado[k] == '\n')
+            at = k + 1;
+        k++;
+    }
+    fprintf(stderr, "  %s: estado de GX distinto de Dolphin desde\n    gc-ps3:  %.40s\n    Dolphin: %.40s\n",
+            name, estado + at, want + at);
+    return 0;
+}
+
 /* Lee la referencia: reloj e instrucciones de la cabecera y los puntos */
 static int load_reference(const char *name, uint64_t *rtc)
 {
@@ -110,6 +170,7 @@ static int check_dol(const char *name)
     const char *max = getenv("GCPS3_REF_MAX");
     if (max)
         limit = strtoull(max, NULL, 0);
+    const int all = npoints;
     while (npoints > 0 && points[npoints - 1].n > limit)
         npoints--;
     if (npoints == 0)
@@ -141,6 +202,8 @@ static int check_dol(const char *name)
             failed_point = -1;
             gc_system_run(&sys, points[npoints - 1].n);
             ok = failed_point < 0 && next_point == npoints;
+            if (ok && npoints == all)
+                ok = check_estado(name);
             if (failed_point >= 0) {
                 const uint64_t from = failed_point ? points[failed_point - 1].n : 0;
                 fprintf(stderr, "  %s: distinto de Dolphin entre las instrucciones %llu y %llu "
@@ -199,6 +262,7 @@ static void test_timer(void)    { CHECK(check_dol("timer")); }
 static void test_hw(void)       { CHECK(check_dol("hw")); }
 static void test_pantalla(void) { CHECK(check_dol("pantalla")); }
 static void test_contador(void) { CHECK(check_dol("contador")); }
+static void test_gx_fifo(void)  { CHECK(check_dol("gx_fifo")); }
 
 const test_case_t dolphin_tests[] = {
     { "huella: formato v1 (el mismo del parche de Dolphin)", test_huella_format },
@@ -208,5 +272,6 @@ const test_case_t dolphin_tests[] = {
     { "dolphin hw: cada instrucción igual a Dolphin", test_hw },
     { "dolphin pantalla: 30 millones de instrucciones iguales a Dolphin", test_pantalla },
     { "dolphin contador: 30 millones de instrucciones iguales a Dolphin", test_contador },
+    { "dolphin gx_fifo: cada instrucción y el estado de GX iguales a Dolphin", test_gx_fifo },
     { NULL, NULL },
 };
