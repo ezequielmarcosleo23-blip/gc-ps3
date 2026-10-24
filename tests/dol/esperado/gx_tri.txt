@@ -1,0 +1,22 @@
+gx_tri: vertices cargados y transformados
+gx_tri: estado inicial
+gx_tri: 1. tipos de primitiva
+gx_tri: 2. formatos de posicion
+gx_tri: 3. matriz de posicion en el vertice
+gx_tri: 4. colores
+gx_tri: 5. normales y luces
+gx_tri: 6. coordenadas: filas y emboss
+gx_tri: 6. coordenadas: matriz final
+gx_tri: 6. coordenadas: tres
+gx_tri: 7. proyeccion ortografica
+gx_tri: 8. un lote con varias primitivas
+gx_tri: 9. cache: NTB
+gx_tri: 9. cache: sin normal despues de NTB
+gx_tri: 9. cache: N
+gx_tri: 9. cache: sin normal despues de N
+gx_tri: 9. cache: el ultimo descartado
+gx_tri: 9. cache: sin normal otra vez
+gx_tri: 10. display list
+gx_tri: 11. tira de 150
+gx_tri: 12. XF y BP distintos
+gx_tri: 20 tokens; OK

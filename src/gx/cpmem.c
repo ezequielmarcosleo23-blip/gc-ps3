@@ -25,6 +25,8 @@
  * Se elige el registro por los 4 bits de arriba: 0x31 también es MATINDEX_A,
  * 0x78 es el grupo A del formato 0.
  */
+#include <string.h>
+
 #include "core/log.h"
 #include "core/system.h"
 #include "gx/gx.h"
@@ -41,11 +43,11 @@ void gc_gx_load_cp(gc_gx_t *gx, uint8_t cmd, uint32_t value)
         return;                    /* sin uso conocido (consultas de rendimiento); 0x20 = 0 al iniciar */
     case GX_CP_MATINDEX_A: s->matindex_a = value; return;
     case GX_CP_MATINDEX_B: s->matindex_b = value; return;
-    case GX_CP_VCD_LO:     s->vcd_lo = value; return;
-    case GX_CP_VCD_HI:     s->vcd_hi = value; return;
-    case GX_CP_VAT_A:      s->vat[cmd & 7u][0] = value; return;
-    case GX_CP_VAT_B:      s->vat[cmd & 7u][1] = value; return;
-    case GX_CP_VAT_C:      s->vat[cmd & 7u][2] = value; return;
+    case GX_CP_VCD_LO:     s->vcd_lo = value; memset(gx->vtx_plan_ok, 0, 8); return;
+    case GX_CP_VCD_HI:     s->vcd_hi = value; memset(gx->vtx_plan_ok, 0, 8); return;
+    case GX_CP_VAT_A:      s->vat[cmd & 7u][0] = value; gx->vtx_plan_ok[cmd & 7u] = 0; return;
+    case GX_CP_VAT_B:      s->vat[cmd & 7u][1] = value; gx->vtx_plan_ok[cmd & 7u] = 0; return;
+    case GX_CP_VAT_C:      s->vat[cmd & 7u][2] = value; gx->vtx_plan_ok[cmd & 7u] = 0; return;
     case GX_CP_ARRAY_BASE:   s->array_base[cmd & 0xFu] = value & GC_CP_ADDR_MASK; return;
     case GX_CP_ARRAY_STRIDE: s->array_stride[cmd & 0xFu] = value & 0xFFu; return;
     default:

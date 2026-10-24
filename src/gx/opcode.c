@@ -151,6 +151,7 @@ static uint32_t run_command(gc_gx_t *gx, const uint8_t *d, uint32_t avail)
         gx->cycles += n * 4 * 3 + 6;
         gx->primitives++;
         gx->vertices += n;
+        gc_gx_draw(gx, op, d + 3, n, vsize);
         return 3 + n * vsize;
     }
 

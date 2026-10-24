@@ -138,14 +138,17 @@ void gc_gx_reset(gc_gx_t *gx)
     gx->commands = gx->primitives = gx->vertices = gx->display_lists = 0;
     gx->unknown = gx->warnings = 0;
     memset(gx->bp_noted, 0, sizeof gx->bp_noted);
+    gc_gx_vtx_reset(gx);
 }
 
 int gc_gx_init(gc_gx_t *gx, struct gc_system *sys)
 {
     gx->sys = sys;
     gx->vbuf = malloc(GC_GX_VBUF_SIZE);
-    if (!gx->vbuf)
+    if (!gx->vbuf || gc_gx_vtx_init(gx) != 0) {
+        gc_gx_free(gx);
         return -1;
+    }
     gc_gx_reset(gx);
     return 0;
 }
@@ -154,4 +157,5 @@ void gc_gx_free(gc_gx_t *gx)
 {
     free(gx->vbuf);
     gx->vbuf = NULL;
+    gc_gx_vtx_free(gx);
 }

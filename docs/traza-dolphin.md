@@ -6,14 +6,15 @@ Los DOLs de prueba corren en el intérprete de gc-ps3 y en Dolphin (cf5cb7ef, co
 
 | Pieza | Qué hace |
 | --- | --- |
-| `tools/dolphin-trace/traza.patch` | Parche del intérprete de Dolphin. Con `GCPS3_HUELLA` o `GCPS3_PUNTOS` en el entorno, avanza instrucción por instrucción (como el paso a paso del depurador) y anota la huella de cada una; sin esas variables corre como siempre. Corrige además dos errores del intérprete (ver abajo) |
-| `tools/dolphin-trace/build.sh` | Baja Dolphin, aplica el parche y compila `dolphin-emu-nogui` sin interfaz, video ni audio (`make dolphin`) |
+| `tools/dolphin-trace/traza.patch` | Parche de Dolphin. Con `GCPS3_HUELLA` o `GCPS3_PUNTOS` en el entorno, el intérprete avanza instrucción por instrucción (como el paso a paso del depurador) y anota la huella de cada una; sin esas variables corre como siempre. Corrige además dos errores del intérprete (ver abajo), deja correr el video por software sin ventana, anota los vértices (`GCPS3_VERTICES`) y, en la traza, toma el reloj del tiempo emulado |
+| `tools/dolphin-trace/build.sh` | Baja Dolphin, aplica el parche y compila `dolphin-emu-nogui` sin interfaz ni audio (`make dolphin`) |
 | `src/cpu/huella.c` | La misma huella en gc-ps3 |
 | `build/host/gc-ps3-runner --huella/--puntos/--detalle` | La huella del runner |
 | `tools/trace_diff.py` | Compara dos huellas y muestra la primera instrucción distinta y qué registros cambian |
 | `tools/dolphin-trace/comparar.py` | Corre cada DOL en los dos con el mismo reloj, compara y, si son iguales, guarda la referencia (`make dolphin-ref`) |
 | `tests/dol/dolphin/*.txt` | Las referencias: la huella encadenada de Dolphin cada 65 536 instrucciones y al final |
 | `tests/dol/dolphin/*.gx.txt` | El estado de GX de Dolphin al final de la traza (ver abajo) |
+| `tests/dol/dolphin/*.vtx.txt` | Cada vértice que transformó Dolphin, en los DOLs que dibujan (ver abajo) |
 | `tests/unit/test_dolphin.c` | `make test` y el CI corren los DOLs y comparan con las referencias, sin Dolphin |
 
 ## Por qué paso a paso
@@ -66,13 +67,25 @@ La CPU no ve los registros de BP ni la memoria de XF, así que una traza igual n
 
 `comparar.py` los compara después de la traza y con `--referencia` guarda el de Dolphin en `tests/dol/dolphin/<prueba>.gx.txt`; `test_dolphin.c` lo revisa cuando corre el DOL completo.
 
+## Vértices (Fase 2, etapa B, D-043)
+
+Con `GCPS3_VERTICES=archivo`, el parche anota cada vértice que transforma el renderizador por software (`SWVertexLoader::DrawCurrentBatch`, después de `TransformUnit`): una línea por vértice, la primera vez que aparece en el lote, que es el orden en que se cargó. El runner escribe lo mismo con `--vertices archivo` ([src/gx/README.md](../src/gx/README.md)):
+
+```
+v <x y z en la vista> p <x y z w proyectados> n <normal, tangente y binormal> c <color 0> <color 1> t<n> <s t q de cada coordenada>
+```
+
+Cada float va con sus 8 dígitos hexadecimales, y un NaN siempre como `7fc00000` (el signo y la carga dependen de la máquina: 0/0 da `ffc00000` en x86 y `7fc00000` en PowerPC). Los colores van en `rrggbbaa`; `t<n>` es XF numTexGens tal cual.
+
+`comparar.py` compara los dos archivos (si difieren, dice desde qué vértice y qué campos) y con `--referencia` guarda el de Dolphin en `tests/dol/dolphin/<prueba>.vtx.txt` si el DOL dibujó algo; `test_dolphin.c` lo revisa vértice por vértice cuando corre el DOL completo. Dolphin anota al vaciar el lote: un DOL tiene que terminar con algo que lo vacíe (un token, por ejemplo) para que estén todos.
+
 ## Configuración de Dolphin
 
-`comparar.py` arranca Dolphin igual que el runner arranca la GameCube (D-032, D-036): intérprete, sin hilo de CPU aparte, IPL salteado, DSP HLE, región NTSC-U e inglés (sin esto Dolphin toma el país del sistema, y sin país usa PAL), sin tarjetas de memoria, mando estándar en el puerto 1 siempre conectado (`GCPadNew.ini` con `Always Connected`; sin dispositivos de entrada figuraría desenchufado) y los otros vacíos, reloj fijo (`EnableCustomRTC`, el mismo `--rtc` que el runner), video `Null`, sin audio y sin límite de velocidad. El `.map` del DOL va a `Maps/<prueba>.map` del usuario de Dolphin, así Dolphin engancha los mismos `OSReport` (ganchos al inicio: no cambian el estado).
+`comparar.py` arranca Dolphin igual que el runner arranca la GameCube (D-032, D-036): intérprete, sin hilo de CPU aparte, IPL salteado, DSP HLE, región NTSC-U e inglés (sin esto Dolphin toma el país del sistema, y sin país usa PAL), sin tarjetas de memoria, mando estándar en el puerto 1 siempre conectado (`GCPadNew.ini` con `Always Connected`; sin dispositivos de entrada figuraría desenchufado) y los otros vacíos, reloj fijo (`EnableCustomRTC`, el mismo `--rtc` que el runner), video por software sin ventana (la referencia de las imágenes y de los vértices, D-041 y D-043), sin audio y sin límite de velocidad. El `.map` del DOL va a `Maps/<prueba>.map` del usuario de Dolphin, así Dolphin engancha los mismos `OSReport` (ganchos al inicio: no cambian el estado).
 
-## Resultado (2026-10-23; `gx_fifo` el 2026-10-24)
+## Resultado (2026-10-23; `gx_fifo` y `gx_tri` el 2026-10-24)
 
-Los 7 DOLs dan el mismo estado que Dolphin antes de cada instrucción, y el mismo estado de GX al final:
+Los 8 DOLs dan el mismo estado que Dolphin antes de cada instrucción, el mismo estado de GX al final y, los que dibujan, los mismos vértices:
 
 | DOL | Instrucciones comparadas | Qué cubre |
 | --- | --- | --- |
@@ -82,7 +95,8 @@ Los 7 DOLs dan el mismo estado que Dolphin antes de cada instrucción, y el mism
 | `hw` | 4 991 377 (completo) | PI, SI, EXI, ARAM, DSP, DI, AI |
 | `pantalla` | 30 000 000 | VI en 480i y el XFB |
 | `contador` | 30 000 000 | 3 interrupciones de video |
-| `gx_fifo` | 124 441 (completo) y el estado de GX | FIFO de GX, CP, PE (Fase 2, etapa A) |
+| `gx_fifo` | 124 441 (completo), el estado de GX y 47 vértices | FIFO de GX, CP, PE (Fase 2, etapa A) |
+| `gx_tri` | 136 905 (completo), el estado de GX y 374 vértices | Vértices, luces y coordenadas de textura (Fase 2, etapa B) |
 
 Lo que hubo que cambiar para llegar ahí:
 
@@ -94,6 +108,8 @@ Lo que hubo que cambiar para llegar ahí:
 | Parche de Dolphin | `fcmpu`/`fcmpo` no borraban el FPCC anterior (`FPRF & ~FPCC_MASK` con la máscara desplazada); los JIT sí | FPSCR 0xA000 en vez de 0x8000 en `cpu` |
 | Parche de Dolphin | `addme`/`subfme` daban CA = 0 con CA = 1 a la entrada (`Helper_Carry(a, carry - 1)`); los JIT usan el acarreo de la máquina | XER distinto en `timer` |
 | Configuración | Región NTSC-U, inglés y el mando siempre conectado | VI en PAL y el SI sin respuesta en `hw` |
+| Parche de Dolphin | El reloj de la EXI es la hora fija más lo que pasó en la PC desde el arranque; con el video por software tarda más en arrancar y la hora cambiaba entre corridas. En la traza se suma el tiempo emulado, como gc-ps3 | `hw` distinto entre dos corridas del mismo Dolphin |
+| Parche de Dolphin | El video por software abría una ventana aunque no hubiera interfaz | Dolphin sin interfaz no arrancaba con `Software Renderer` |
 
 Los dos errores del intérprete de Dolphin valen también para Dolphin sin parchar: se pueden informar al proyecto.
 
@@ -101,7 +117,7 @@ Los dos errores del intérprete de Dolphin valen también para Dolphin sin parch
 
 ```bash
 make dolphin                 # una vez por sesión (~1 h con 2 núcleos)
-make dolphin-ref             # compara los 7 DOLs y regenera tests/dol/dolphin
+make dolphin-ref             # compara los 8 DOLs y regenera tests/dol/dolphin
 python3 tools/dolphin-trace/comparar.py tests/dol/bin/hw.dol          # uno solo
 python3 tools/trace_diff.py build/dolphin/trazas/hw.runner.huella build/dolphin/trazas/hw.dolphin.huella
 ```

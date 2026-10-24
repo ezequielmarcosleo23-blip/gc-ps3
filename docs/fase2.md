@@ -18,8 +18,8 @@ Todo lo anterior a la lista de dibujo es portable y se prueba en el CI; el RSX, 
 | Etapa | Contenido | Se prueba con | Estado |
 | --- | --- | --- | --- |
 | A. FIFO y Command Processor | FIFO de GX en la RAM (write-gather pipe, punteros del PI y del CP, vuelta, marcas alta y baja), lector de comandos (registros de CP/XF/BP, cargas indexadas, display lists, invalidación de la caché de vértices, primitivas que por ahora solo se saltan), estado de BP/CP/XF, Pixel Engine (tokens, "draw done", interrupciones) | Unitarias, DOL `gx_fifo` con una mini-librería GX propia, traza de Dolphin | Completa (2026-10-24), ver abajo |
-| B. Vértices y XF | Formatos de vértice (VAT/VCD, directo e índices de 8 y 16 bits), tipos de componente y de color, matrices indexadas, proyección, viewport, normales, coordenadas de textura, 8 luces | Unitarias con valores calculados; DOL `gx_tri` | Pendiente |
-| C. Rasterizador de referencia (PC) | Primitivas, recorte, culling, Z en los formatos del EFB, scissor, TEV en enteros como el hardware, alpha test, mezcla, todos los formatos de textura con paleta y filtros, copias del EFB a la RAM (XFB y texturas) | DOLs `gx_tex`, `gx_tev`, `gx_light`, `gx_copy`; el XFB en la RAM contra el renderizador por software de Dolphin | Pendiente |
+| B. Vértices y XF | Formatos de vértice (VAT/VCD, directo e índices de 8 y 16 bits), tipos de componente y de color, matrices indexadas, proyección, normales, coordenadas de textura, 8 luces | Unitarias con valores calculados; DOL `gx_tri` contra los vértices del video por software de Dolphin | Completa (2026-10-24), ver abajo |
+| C. Rasterizador de referencia (PC) | Viewport, primitivas, recorte, culling, Z en los formatos del EFB, scissor, TEV en enteros como el hardware, alpha test, mezcla, todos los formatos de textura con paleta y filtros, copias del EFB a la RAM (XFB y texturas) | DOLs `gx_tex`, `gx_tev`, `gx_light`, `gx_copy`; el XFB en la RAM contra el renderizador por software de Dolphin | Pendiente |
 | D. Backend RSX | EFB como destino de rsxkit, vértices al RSX, TEV a fragment programs, texturas decodificadas (CMPR a DXT1), copias del EFB al XFB pasando por la RAM, en la app | RPCS3: la app anota la comparación de cada cuadro con el runner y `compare_log` la revisa | Pendiente |
 | E. Cierre | Criterio de salida, documentos y decisiones | CI y RPCS3 | Pendiente |
 
@@ -32,6 +32,21 @@ Todo lo anterior a la lista de dibujo es portable y se prueba en el CI; el RSX, 
 | A3. Pixel Engine | Token con y sin interrupción, "draw done", señales juntadas en un evento ([src/hw/pe.c](../src/hw/pe.c)) |
 | A4. DOL | Mini-librería `tests/dol/gxlib.c` y DOL `gx_fifo` (10 secciones, [tests/dol](../tests/dol/README.md)). Igual a Dolphin en sus 124 441 instrucciones y con el mismo estado de GX al final (410 líneas: FIFO, BP, CP y XF). El parche de Dolphin y el runner vuelcan ese estado; las referencias de los 7 DOLs lo incluyen ([traza-dolphin.md](traza-dolphin.md)) |
 | A5. Verificación | 19 pruebas unitarias nuevas y 2 de DOL (128 en total), OK en x86-64 con ASan/UBSan y en PowerPC 64; `make test-app` corre también `gx_fifo`. Mutaciones a mano detectadas: sin el corte del tramo, la marca alta después de sumar, el PE sin el mínimo de 500, 501 en vez de 500 y BP de 13 ciclos (estas dos, también en la traza de Dolphin). Decisión D-042 |
+
+## Etapa B: resultado (2026-10-24)
+
+El viewport pasó a la etapa C: va después del recorte, y en el video por software de Dolphin también (`Clipper`), así que la comparación de vértices termina en la posición proyectada.
+
+| Paso | Qué quedó |
+| --- | --- |
+| B1. Referencia | Dolphin con video por software sin ventana: el parche anota cada vértice que transforma (`GCPS3_VERTICES`) y, en la traza, toma el reloj del tiempo emulado. Las referencias de los 7 DOLs no cambiaron con este video ([traza-dolphin.md](traza-dolphin.md)) |
+| B2. Cargador de vértices | Juntar en el PPU (índices a bytes de la RAM, descartes) y decodificar listo para SPU en bloques de 64: los 5 formatos de componente, ByteDequant, los 6 de color, NTB con uno y tres índices, índices de matriz ([src/gx/vtx.c](../src/gx/vtx.c)). La semántica es la del cargador x64 de Dolphin, el que usa por omisión |
+| B3. XF | Posición, perspectiva y ortográfica, normales, color y alfa en los dos canales con las 8 luces (difusa y atenuación de cada tipo), coordenadas de textura (filas, emboss, colores, matriz final, q = 0, escala de BP), listo para SPU con una foto del XF de 7 KB ([src/gx/xform.c](../src/gx/xform.c)). Las mismas operaciones de float en el mismo orden que `TransformUnit`, sin FMA |
+| B4. Primitivas | Cada primitiva se carga y se transforma al leerla: partes de 16 380, los vértices que usa cada tipo, la caché de normales, XF y BP que no coinciden ([src/gx/prim.c](../src/gx/prim.c)); `--vertices` en el runner y la comparación en `comparar.py` y en `test_dolphin.c` |
+| B5. DOL | Funciones de vértices en `tests/dol/gxvtx.c` (aparte, para que `gx_fifo.dol` no cambie) y DOL `gx_tri` (12 partes, [tests/dol](../tests/dol/README.md)): igual a Dolphin en sus 136 905 instrucciones, el estado de GX y los 374 vértices, bit a bit, en la primera corrida |
+| B6. Verificación | 28 pruebas unitarias nuevas y 2 de DOL (158 en total), OK en x86-64 con ASan/UBSan y en PowerPC 64; `make test-app` corre también `gx_tri`. 24 de 25 mutaciones detectadas (la que no: el orden de una multiplicación del alfa, que el redondeo a 8 bits tapa). Compilado con FMA (`-ffp-contract=fast -O2` en PowerPC) los vértices de `gx_tri` dejan de ser los de Dolphin. Decisión D-043 |
+
+Dolphin transforma al vaciar el lote, con el estado de ese momento; gc-ps3, al leer la primitiva, como el hardware. Da lo mismo porque todo lo que cambia el XF vacía el lote antes, salvo escribir XF 0x1018 o 0x1019 con el mismo valor que ya tiene el registro de CP (MATINDEX); libogc escribe primero el de CP, que sí lo vacía.
 
 ## Criterio de salida
 
@@ -56,6 +71,7 @@ Todo lo anterior a la lista de dibujo es portable y se prueba en el CI; el RSX, 
 | Precisión del RSX frente a la del TEV | Tolerancia medida y documentada |
 | RPCS3 puede no emular bien algo del RSX (formatos de textura, render a textura) | Probar cada cosa aparte; lo que falle se confirma en la consola |
 | Con un solo hilo, Dolphin procesa el FIFO en momentos de su planificador: para que la traza siga igual hay que copiar ese momento | La traza de `gx_fifo` lo muestra, como pasó con el decrementador (D-040) |
+| En las SPU el float redondea hacia cero y no tiene denormales: el XF ahí no puede dar los bits de Dolphin | Decidirlo en la fase de rendimiento (doble precisión, tolerancia, o quedarse en el PPU); el PPU es la referencia |
 | Es la fase más grande | Etapas cortas con pruebas, plan de cada etapa antes de empezarla |
 
 ## Fuera de la Fase 2

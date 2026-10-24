@@ -68,6 +68,8 @@ void gc_gx_load_bp(gc_gx_t *gx, uint8_t reg, uint32_t value)
     if (old == nv && !always_acts(reg))
         return;
     gx->bp[reg] = nv;
+    if (reg >= 0x30 && reg <= 0x3F)
+        gx->xf_dirty = 1;                       /* SU_SSIZE y SU_TSIZE: la escala de las coordenadas */
 
     gc_pe_t *pe = &gx->sys->pe;
     switch (reg) {

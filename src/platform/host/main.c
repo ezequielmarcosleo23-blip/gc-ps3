@@ -23,6 +23,9 @@
  *     --detalle D:H    con --huella: el estado completo de las instrucciones
  *                      D a H-1 en ARCHIVO.detalle
  *     --puntos ARCHIVO la huella encadenada cada 65 536 instrucciones y al final
+ *     --estado-gx ARCHIVO  al terminar, el estado de GX en texto (FIFO, BP, CP, XF)
+ *     --vertices ARCHIVO   cada vértice transformado, en texto, como el volcado
+ *                      del Dolphin parchado (GCPS3_VERTICES)
  *
  * Lo que el programa imprime (OSReport, printf...) sale por la salida estándar;
  * los mensajes del emulador, por la de error. Sale con el código de exit() del
@@ -61,6 +64,7 @@ static void usage(FILE *out, const char *argv0)
             "  --detalle D:H    con --huella: estado completo de los pasos D a H-1\n"
             "  --puntos ARCHIVO huella encadenada cada 65536 pasos y al final\n"
             "  --estado-gx ARCHIVO  al terminar, el estado de GX en texto (FIFO, BP, CP, XF)\n"
+            "  --vertices ARCHIVO   cada vertice transformado, en texto (como Dolphin)\n"
             "  --version, --help\n",
             argv0, (unsigned)DEFAULT_CYCLES);
 }
@@ -163,6 +167,17 @@ static int write_estado_gx(const char *path)
     return (ferror(f) | fclose(f)) != 0 ? -1 : 0;
 }
 
+/* --vertices */
+static FILE *vertices_file;
+
+static void vertex_line(void *ctx, const struct gx_vtx_out *v, uint32_t ntex)
+{
+    char text[GC_GX_VERTEX_TEXT];
+    (void)ctx;
+    gc_gx_vertex_text(v, ntex, text);
+    fprintf(vertices_file, "%s\n", text);
+}
+
 static void report_line(void *ctx, const char *line)
 {
     (void)ctx;
@@ -245,6 +260,7 @@ int main(int argc, char **argv)
     uint64_t cycles = DEFAULT_CYCLES;
     const char *dol_path = NULL, *trace_path = NULL, *map_path = NULL, *image_path = NULL;
     const char *huella_path = NULL, *puntos_path = NULL, *detalle = NULL, *estado_path = NULL;
+    const char *vertices_path = NULL;
     gc_boot_config_t cfg = { 0, 0 };
     int have_rtc = 0, list_frames = 0;
 
@@ -299,6 +315,12 @@ int main(int argc, char **argv)
                 return 2;
             }
             estado_path = argv[i];
+        } else if (strcmp(a, "--vertices") == 0) {
+            if (++i >= argc) {
+                fprintf(stderr, "--vertices necesita un archivo\n");
+                return 2;
+            }
+            vertices_path = argv[i];
         } else if (strcmp(a, "--pal") == 0) {
             cfg.pal = 1;
         } else if (strcmp(a, "--rtc") == 0) {
@@ -410,6 +432,18 @@ int main(int argc, char **argv)
         sys.cpu.trace = trace_line;
     }
 
+    if (vertices_path) {
+        vertices_file = fopen(vertices_path, "w");
+        if (!vertices_file) {
+            fprintf(stderr, "%s: no se pudo crear\n", vertices_path);
+            gc_system_free(&sys);
+            return 1;
+        }
+        setvbuf(vertices_file, NULL, _IOFBF, 1u << 20);
+        fprintf(vertices_file, "# gc-ps3 vertices v%d\n", GC_GX_VERTICES_VERSION);
+        sys.gx.vertex_cb = vertex_line;
+    }
+
     const clock_t t0 = clock();
     const uint64_t ran = gc_system_run(&sys, cycles);
     const double secs = (double)(clock() - t0) / CLOCKS_PER_SEC;
@@ -442,11 +476,19 @@ int main(int argc, char **argv)
                 (unsigned long long)sys.vi.fields);
     const int image_failed = report_frame(image_path) != 0;
     const int estado_failed = estado_path && write_estado_gx(estado_path) != 0;
+    int vertices_failed = 0;
+    if (vertices_file) {
+        fprintf(stderr, "runner: %llu primitivas, %llu vertices transformados\n",
+                (unsigned long long)sys.gx.primitives, (unsigned long long)sys.gx.drawn);
+        vertices_failed = (ferror(vertices_file) | fclose(vertices_file)) != 0;
+        if (vertices_failed)
+            fprintf(stderr, "runner: no se pudo escribir %s\n", vertices_path);
+    }
     const int code = sys.hle.exited ? (int)(sys.hle.exit_code & 0xFFu) : 0;
     if (sys.hle.exited)
         fprintf(stderr, "runner: el programa termino con exit(%d)\n", (int)sys.hle.exit_code);
     else
         fprintf(stderr, "runner: se acabaron los ciclos sin exit\n");
     gc_system_free(&sys);
-    return image_failed || huella_failed || estado_failed ? 1 : code;
+    return image_failed || huella_failed || estado_failed || vertices_failed ? 1 : code;
 }

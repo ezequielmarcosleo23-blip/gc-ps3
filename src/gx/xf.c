@@ -53,6 +53,8 @@ void gc_gx_load_xf(gc_gx_t *gx, uint16_t base, uint32_t count, const uint8_t *da
         end = GC_XF_REGS_END;
     }
 
+    gx->xf_dirty = 1;
+
     /* Memoria: matrices y luces */
     if (addr < GC_XF_REGS_START) {
         const uint32_t mem_base = addr;
@@ -80,6 +82,7 @@ void gc_gx_load_xf_indexed(gc_gx_t *gx, uint32_t array, uint32_t index, uint16_t
             GC_LOGW("gx: carga indexada de XF desde 0x%08x fuera de la RAM", (unsigned)src);
         return;                                    /* en Dolphin, un puntero nulo */
     }
+    gx->xf_dirty = 1;
     for (uint32_t i = 0; i < size; i++)
         gx->xf[address + i] = be32(p + 4 * i);
 }

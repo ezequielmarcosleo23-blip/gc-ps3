@@ -25,7 +25,8 @@
  * al final). Las referencias las genera tools/dolphin-trace/comparar.py.
  *
  * Si hay tests/dol/dolphin/<prueba>.gx.txt, el estado de GX al final (FIFO,
- * BP, CP y XF, src/gx/estado.c) también tiene que ser el de Dolphin.
+ * BP, CP y XF, src/gx/estado.c) también tiene que ser el de Dolphin; si hay
+ * <prueba>.vtx.txt, también cada vértice transformado, bit a bit.
  *
  * GCPS3_REF_MAX=N revisa solo hasta la instrucción N (make test-be, que corre
  * en QEMU, usa 2 millones); entonces no se mira el estado de GX.
@@ -136,6 +137,79 @@ static int check_estado(const char *name)
     return 0;
 }
 
+/* ---- vértices ---- */
+
+static char *vtx_want;                  /* las líneas de la referencia, sin comentarios */
+static size_t vtx_at, vtx_len;
+static uint64_t vtx_seen, vtx_bad;      /* vtx_bad: 1 + el primero distinto, o 0 */
+
+static void vertex_line(void *ctx, const struct gx_vtx_out *v, uint32_t ntex)
+{
+    char text[GC_GX_VERTEX_TEXT];
+    (void)ctx;
+    gc_gx_vertex_text(v, ntex, text);
+    const size_t n = strlen(text);
+    if (!vtx_bad && (vtx_at + n >= vtx_len || memcmp(vtx_want + vtx_at, text, n) != 0 ||
+                     vtx_want[vtx_at + n] != '\n')) {
+        vtx_bad = vtx_seen + 1;
+        fprintf(stderr, "    gc-ps3:  %.100s\n", text);
+    }
+    if (!vtx_bad)
+        vtx_at += n + 1;
+    vtx_seen++;
+}
+
+/* Carga <prueba>.vtx.txt si existe: 1 si hay referencia */
+static int load_vertices(const char *name)
+{
+    char path[256], line[GC_GX_VERTEX_TEXT + 8];
+    snprintf(path, sizeof path, "tests/dol/dolphin/%s.vtx.txt", name);
+    FILE *f = fopen(path, "r");
+    if (!f)
+        return 0;
+    size_t cap = 1u << 16;
+    vtx_want = malloc(cap);
+    vtx_len = 0;
+    while (vtx_want && fgets(line, sizeof line, f)) {
+        const size_t n = strlen(line);
+        if (line[0] == '#')
+            continue;
+        if (vtx_len + n + 1 > cap) {
+            char *bigger = realloc(vtx_want, cap * 2);
+            if (!bigger) {
+                free(vtx_want);
+                vtx_want = NULL;
+                break;
+            }
+            vtx_want = bigger;
+            cap *= 2;
+        }
+        memcpy(vtx_want + vtx_len, line, n);
+        vtx_len += n;
+    }
+    fclose(f);
+    if (vtx_want)
+        vtx_want[vtx_len] = '\0';
+    vtx_at = 0;
+    vtx_seen = vtx_bad = 0;
+    return vtx_want != NULL;
+}
+
+/* 1 si los vértices fueron los de la referencia, todos */
+static int check_vertices(const char *name)
+{
+    if (!vtx_bad && vtx_at == vtx_len)
+        return 1;
+    if (vtx_bad) {
+        const char *at = vtx_want + vtx_at;
+        fprintf(stderr, "  %s: el vértice %llu es distinto del de Dolphin\n    Dolphin: %.100s\n", name,
+                (unsigned long long)(vtx_bad - 1), vtx_at < vtx_len ? at : "(no hay más)");
+    } else {
+        fprintf(stderr, "  %s: %llu vértices, Dolphin tiene más\n", name, (unsigned long long)vtx_seen);
+    }
+    return 0;
+}
+
 /* Lee la referencia: reloj e instrucciones de la cabecera y los puntos */
 static int load_reference(const char *name, uint64_t *rtc)
 {
@@ -197,6 +271,9 @@ static int check_dol(const char *name)
             gc_system_load_map(&sys, map, map_len);
             sys.hle.report = ignore_line;
             sys.cpu.trace = step;
+            const int vertices = npoints == all && load_vertices(name);
+            if (vertices)
+                sys.gx.vertex_cb = vertex_line;
             seen = chain = 0;
             next_point = 0;
             failed_point = -1;
@@ -204,12 +281,16 @@ static int check_dol(const char *name)
             ok = failed_point < 0 && next_point == npoints;
             if (ok && npoints == all)
                 ok = check_estado(name);
+            if (ok && vertices)
+                ok = check_vertices(name);
+            free(vtx_want);
+            vtx_want = NULL;
             if (failed_point >= 0) {
                 const uint64_t from = failed_point ? points[failed_point - 1].n : 0;
                 fprintf(stderr, "  %s: distinto de Dolphin entre las instrucciones %llu y %llu "
                         "(tools/dolphin-trace/comparar.py dice dónde)\n", name,
                         (unsigned long long)from, (unsigned long long)points[failed_point].n);
-            } else if (!ok) {
+            } else if (next_point != npoints) {
                 fprintf(stderr, "  %s: paró en la instrucción %llu, Dolphin llega a %llu\n", name,
                         (unsigned long long)seen, (unsigned long long)points[npoints - 1].n);
             }
@@ -263,6 +344,7 @@ static void test_hw(void)       { CHECK(check_dol("hw")); }
 static void test_pantalla(void) { CHECK(check_dol("pantalla")); }
 static void test_contador(void) { CHECK(check_dol("contador")); }
 static void test_gx_fifo(void)  { CHECK(check_dol("gx_fifo")); }
+static void test_gx_tri(void)   { CHECK(check_dol("gx_tri")); }
 
 const test_case_t dolphin_tests[] = {
     { "huella: formato v1 (el mismo del parche de Dolphin)", test_huella_format },
@@ -273,5 +355,6 @@ const test_case_t dolphin_tests[] = {
     { "dolphin pantalla: 30 millones de instrucciones iguales a Dolphin", test_pantalla },
     { "dolphin contador: 30 millones de instrucciones iguales a Dolphin", test_contador },
     { "dolphin gx_fifo: cada instrucción y el estado de GX iguales a Dolphin", test_gx_fifo },
+    { "dolphin gx_tri: cada instrucción, el estado de GX y cada vértice iguales a Dolphin", test_gx_tri },
     { NULL, NULL },
 };

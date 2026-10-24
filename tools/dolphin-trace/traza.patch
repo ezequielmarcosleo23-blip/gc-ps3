@@ -1,3 +1,30 @@
+diff --git a/Source/Core/Core/HW/EXI/EXI_DeviceIPL.cpp b/Source/Core/Core/HW/EXI/EXI_DeviceIPL.cpp
+index 82650ff1a0..a0261b9d12 100644
+--- a/Source/Core/Core/HW/EXI/EXI_DeviceIPL.cpp
++++ b/Source/Core/Core/HW/EXI/EXI_DeviceIPL.cpp
+@@ -3,6 +3,7 @@
+ 
+ #include "Core/HW/EXI/EXI_DeviceIPL.h"
+ 
++#include <cstdlib>
+ #include <cstring>
+ #include <string>
+ 
+@@ -417,6 +418,14 @@ u32 CEXIIPL::GetEmulatedTime(Core::System& system, u32 epoch)
+     // let's keep time moving forward, regardless of what it starts at
+     ltime += system.GetCoreTiming().GetTicks() / system.GetSystemTimers().GetTicksPerSecond();
+   }
++  else if (Config::Get(Config::MAIN_CUSTOM_RTC_ENABLE) &&
++           (std::getenv("GCPS3_HUELLA") || std::getenv("GCPS3_PUNTOS")))
++  {
++    // gc-ps3: con la traza, la hora fija más el tiempo emulado, como gc-ps3; con
++    // el reloj de la PC la traza cambiaba según lo que tardaba en arrancar
++    ltime = Config::Get(Config::MAIN_CUSTOM_RTC_VALUE) +
++            system.GetCoreTiming().GetTicks() / system.GetSystemTimers().GetTicksPerSecond();
++  }
+   else
+   {
+     ASSERT(!Core::WantsDeterminism());
 diff --git a/Source/Core/Core/PowerPC/Interpreter/Interpreter.cpp b/Source/Core/Core/PowerPC/Interpreter/Interpreter.cpp
 index affdc43936..6c2b19340a 100644
 --- a/Source/Core/Core/PowerPC/Interpreter/Interpreter.cpp
@@ -331,3 +358,174 @@ index 975f408068..462d6f358d 100644
  
    if (inst.OE)
      ppc_state.SetXER_OV(HasAddOverflowed(a, b, result));
+diff --git a/Source/Core/VideoBackends/Software/SWGfx.cpp b/Source/Core/VideoBackends/Software/SWGfx.cpp
+index 7004c50864..a92c9d190b 100644
+--- a/Source/Core/VideoBackends/Software/SWGfx.cpp
++++ b/Source/Core/VideoBackends/Software/SWGfx.cpp
+@@ -26,7 +26,7 @@ SWGfx::~SWGfx() = default;
+ 
+ bool SWGfx::IsHeadless() const
+ {
+-  return m_window->IsHeadless();
++  return !m_window || m_window->IsHeadless();  // gc-ps3: puede no haber ventana
+ }
+ 
+ bool SWGfx::SupportsUtilityDrawing() const
+@@ -57,6 +57,9 @@ SWGfx::CreateFramebuffer(AbstractTexture* color_attachment, AbstractTexture* dep
+ 
+ bool SWGfx::BindBackbuffer(const ClearColor& clear_color)
+ {
++  if (!m_window)  // gc-ps3: sin ventana
++    return true;
++
+   // Look for framebuffer resizes
+   if (!g_presenter->SurfaceResizedTestAndClear())
+     return true;
+@@ -137,6 +140,8 @@ void SWGfx::SetScissorRect(const MathUtil::Rectangle<int>& rc)
+ 
+ SurfaceInfo SWGfx::GetSurfaceInfo() const
+ {
++  if (!m_window)  // gc-ps3: sin ventana
++    return {1, 1, 1.0f, AbstractTextureFormat::RGBA8};
+   GLContext* context = m_window->GetContext();
+   return {std::max(context->GetBackBufferWidth(), 1u), std::max(context->GetBackBufferHeight(), 1u),
+           1.0f, AbstractTextureFormat::RGBA8};
+diff --git a/Source/Core/VideoBackends/Software/SWVertexLoader.cpp b/Source/Core/VideoBackends/Software/SWVertexLoader.cpp
+index 8759de597a..bab18ee815 100644
+--- a/Source/Core/VideoBackends/Software/SWVertexLoader.cpp
++++ b/Source/Core/VideoBackends/Software/SWVertexLoader.cpp
+@@ -4,7 +4,11 @@
+ #include "VideoBackends/Software/SWVertexLoader.h"
+ 
+ #include <cstddef>
++#include <cstdio>
++#include <cstdlib>
++#include <cstring>
+ #include <limits>
++#include <vector>
+ 
+ #include "Common/Assert.h"
+ #include "Common/CommonTypes.h"
+@@ -27,6 +31,62 @@
+ #include "VideoCommon/VideoConfig.h"
+ #include "VideoCommon/XFMemory.h"
+ 
++// gc-ps3: con GCPS3_VERTICES=archivo, cada vértice que transforma TransformUnit
++// (la primera vez que aparece en el lote, es decir, en el orden de carga) se
++// anota en texto: posición en la vista, proyectada, las 3 normales, los 2
++// colores y las coordenadas de textura que genera XF, con los bits de cada
++// float. gc-ps3 escribe lo mismo (src/gx, docs/traza-dolphin.md).
++namespace GCPS3Vertices
++{
++static FILE* File()
++{
++  static bool init = false;
++  static FILE* file = nullptr;
++  if (!init)
++  {
++    init = true;
++    if (const char* path = std::getenv("GCPS3_VERTICES"))
++    {
++      file = std::fopen(path, "w");
++      if (file)
++        std::fprintf(file, "# gc-ps3 vertices v1\n");
++    }
++  }
++  return file;
++}
++
++// Un NaN se anota siempre como 7fc00000: su signo y su carga dependen de la
++// máquina (0/0 da ffc00000 en x86 y 7fc00000 en PowerPC)
++static u32 Bits(float f)
++{
++  if (f != f)
++    return 0x7fc00000u;
++  u32 u;
++  std::memcpy(&u, &f, sizeof(u));
++  return u;
++}
++
++static void Write(FILE* f, const OutputVertexData* v, u32 ntex)
++{
++  std::fprintf(f, "v %08x %08x %08x p %08x %08x %08x %08x n", Bits(v->mvPosition.x),
++               Bits(v->mvPosition.y), Bits(v->mvPosition.z), Bits(v->projectedPosition.x),
++               Bits(v->projectedPosition.y), Bits(v->projectedPosition.z),
++               Bits(v->projectedPosition.w));
++  for (const auto& n : v->normal)
++    std::fprintf(f, " %08x %08x %08x", Bits(n.x), Bits(n.y), Bits(n.z));
++  std::fprintf(f, " c");
++  for (const auto& c : v->color)
++    std::fprintf(f, " %02x%02x%02x%02x", c[0], c[1], c[2], c[3]);
++  std::fprintf(f, " t%u", ntex);
++  for (u32 k = 0; k < ntex; k++)
++  {
++    std::fprintf(f, " %08x %08x %08x", Bits(v->texCoords[k].x), Bits(v->texCoords[k].y),
++                 Bits(v->texCoords[k].z));
++  }
++  std::fprintf(f, "\n");
++}
++}  // namespace GCPS3Vertices
++
+ SWVertexLoader::SWVertexLoader() = default;
+ 
+ SWVertexLoader::~SWVertexLoader() = default;
+@@ -65,6 +125,9 @@ void SWVertexLoader::DrawCurrentBatch(u32 base_index, u32 num_indices, u32 base_
+   m_setup_unit.Init(primitive_type);
+   Rasterizer::SetTevKonstColors();
+ 
++  FILE* gcps3_file = GCPS3Vertices::File();
++  std::vector<u8> gcps3_seen;
++
+   for (u32 i = 0; i < m_index_generator.GetIndexLen(); i++)
+   {
+     const u16 index = m_cpu_index_buffer[i];
+@@ -81,6 +144,17 @@ void SWVertexLoader::DrawCurrentBatch(u32 base_index, u32 num_indices, u32 base_
+     TransformUnit::TransformColor(&m_vertex, outVertex);
+     TransformUnit::TransformTexCoord(&m_vertex, outVertex);
+ 
++    if (gcps3_file)
++    {
++      if (gcps3_seen.size() <= index)
++        gcps3_seen.resize(index + 1u, 0);
++      if (!gcps3_seen[index])
++      {
++        gcps3_seen[index] = 1;
++        GCPS3Vertices::Write(gcps3_file, outVertex, xfmem.numTexGen.numTexGens);
++      }
++    }
++
+     // assemble and rasterize the primitive
+     m_setup_unit.SetupVertex();
+ 
+@@ -88,6 +162,8 @@ void SWVertexLoader::DrawCurrentBatch(u32 base_index, u32 num_indices, u32 base_
+   }
+ 
+   INCSTAT(g_stats.this_frame.num_drawn_objects);
++  if (gcps3_file)
++    std::fflush(gcps3_file);  // Dolphin sale con _Exit al cortar la traza
+ }
+ 
+ void SWVertexLoader::SetFormat()
+diff --git a/Source/Core/VideoBackends/Software/SWmain.cpp b/Source/Core/VideoBackends/Software/SWmain.cpp
+index 66c96f5a16..efa703c56c 100644
+--- a/Source/Core/VideoBackends/Software/SWmain.cpp
++++ b/Source/Core/VideoBackends/Software/SWmain.cpp
+@@ -91,9 +91,15 @@ void VideoSoftware::InitBackendInfo(const WindowSystemInfo& wsi)
+ 
+ bool VideoSoftware::Initialize(const WindowSystemInfo& wsi)
+ {
+-  std::unique_ptr<SWOGLWindow> window = SWOGLWindow::Create(wsi);
+-  if (!window)
+-    return false;
++  // gc-ps3: sin ventana (headless) no hace falta OpenGL: la ventana solo muestra
++  // la imagen, y lo que se compara es el XFB en la RAM (tools/dolphin-trace)
++  std::unique_ptr<SWOGLWindow> window;
++  if (wsi.type != WindowSystemType::Headless)
++  {
++    window = SWOGLWindow::Create(wsi);
++    if (!window)
++      return false;
++  }
+ 
+   Clipper::Init();
+   Rasterizer::Init();

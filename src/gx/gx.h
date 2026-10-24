@@ -19,9 +19,10 @@
  */
 
 /*
- * El lado de la GPU (Fase 2, etapa A): lee el FIFO de GX de la RAM, decodifica
- * los comandos y guarda el estado de BP, CP y XF. Las primitivas todavía no se
- * dibujan: se saltan según el tamaño de vértice que dan VCD y VAT.
+ * El lado de la GPU (Fase 2): lee el FIFO de GX de la RAM, decodifica los
+ * comandos y guarda el estado de BP, CP y XF (etapa A). Los vértices de cada
+ * primitiva se cargan y se transforman (etapa B, prim.c); todavía no se
+ * dibujan.
  *
  * El tiempo es el de Dolphin (commit cf5cb7ef) con un solo hilo
  * (VideoCommon/Fifo.cpp y OpcodeDecoding.cpp):
@@ -79,6 +80,7 @@ typedef struct gc_gx_cp_state {
 } gc_gx_cp_state_t;
 
 struct gc_system;
+struct gx_vtx_out;
 
 typedef struct gc_gx {
     struct gc_system *sys;
@@ -103,11 +105,21 @@ typedef struct gc_gx {
 
     /* Contadores (log y pruebas) */
     uint64_t  commands;               /* comandos decodificados */
-    uint64_t  primitives, vertices;   /* saltados hasta la etapa B */
+    uint64_t  primitives, vertices;   /* en el FIFO */
+    uint64_t  drawn;                  /* vértices transformados (los que usa la primitiva) */
     uint64_t  display_lists;
     uint32_t  unknown;                /* opcodes desconocidos */
     uint32_t  warnings;               /* avisos del log (se limitan) */
     uint8_t   bp_noted[256];          /* registros de BP con efecto pendiente ya avisados */
+
+    /* Vértices (prim.c) */
+    struct gc_gx_vtx *vtx;            /* planes, foto de XF, caché de normales y búferes */
+    uint8_t   vtx_plan_ok[8];         /* el plan de cada VAT está al día con VCD y VAT */
+    int       xf_dirty;               /* XF o las escalas de BP cambiaron desde la foto */
+    /* Cada vértice transformado, en el orden en que se cargó (el volcado de
+     * Dolphin, GCPS3_VERTICES); ntex es XF numTexGens tal cual (4 bits) */
+    void    (*vertex_cb)(void *ctx, const struct gx_vtx_out *v, uint32_t ntex);
+    void     *vertex_ctx;
 } gc_gx_t;
 
 /* Reserva el búfer de video. 0, o -1 sin memoria. */
@@ -149,6 +161,24 @@ uint32_t gc_gx_vertex_size(gc_gx_t *gx, uint32_t vat);
 
 /* La memoria de CP en el orden de sus comandos (FillCPMemoryArray): 256 palabras. */
 void     gc_gx_cp_memory(const gc_gx_t *gx, uint32_t out[256]);
+
+/* ---- primitivas (prim.c) ---- */
+
+/* Carga y transforma los n vértices de una primitiva (opcode op, 0x80-0xBF)
+ * que están en data, de vsize bytes cada uno. */
+void gc_gx_draw(gc_gx_t *gx, uint8_t op, const uint8_t *data, uint32_t n, uint32_t vsize);
+
+int  gc_gx_vtx_init(gc_gx_t *gx);
+void gc_gx_vtx_free(gc_gx_t *gx);
+void gc_gx_vtx_reset(gc_gx_t *gx);
+
+#define GC_GX_VERTICES_VERSION 1
+#define GC_GX_VERTEX_TEXT      512
+
+/* Un vértice en texto, como lo anota el parche de Dolphin (sin '\n'): bits
+ * de la posición en la vista, la proyectada, las 3 normales, los 2 colores y
+ * las coordenadas; un NaN siempre como 7fc00000. */
+void gc_gx_vertex_text(const struct gx_vtx_out *v, uint32_t ntex, char buf[GC_GX_VERTEX_TEXT]);
 
 /* ---- estado completo para comparar con Dolphin (estado.c) ---- */
 

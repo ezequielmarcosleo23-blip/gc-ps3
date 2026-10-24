@@ -10,9 +10,10 @@ Dolphin corre la misma cantidad de instrucciones con el mismo reloj y la misma
 configuración del hardware (docs/traza-dolphin.md), y tools/trace_diff.py
 compara. Si difieren, repite las dos con el detalle de esas instrucciones y
 dice qué registros cambian. Después compara el estado de GX que los dos dejan
-al final (FIFO, BP, CP y XF; la CPU no los ve). Con --referencia guarda los
-puntos y el estado de Dolphin en esa carpeta (tests/dol/dolphin), que es lo
-que revisa make test.
+al final (FIFO, BP, CP y XF; la CPU no los ve) y cada vértice que transforman
+(posición, normales, colores y coordenadas, bit a bit). Con --referencia
+guarda los puntos, el estado y los vértices de Dolphin en esa carpeta
+(tests/dol/dolphin), que es lo que revisa make test.
 
     python3 tools/dolphin-trace/comparar.py --dolphin build/dolphin/build/Binaries/dolphin-emu-nogui \\
         tests/dol/bin/hola.dol tests/dol/bin/cpu.dol
@@ -53,7 +54,7 @@ DOLPHIN_CONFIG = [
     "Dolphin.Core.SelectedLanguage=0",     # inglés, el de la SRAM de gc-ps3
     "Dolphin.Core.EnableCustomRTC=True",
     "Dolphin.Core.EmulationSpeed=0",
-    "Dolphin.Core.GFXBackend=Null",
+    "Dolphin.Core.GFXBackend=Software Renderer",   # la referencia de las imágenes (D-041, D-043)
     "Dolphin.DSP.Backend=No Audio Output",
     "Dolphin.Interface.ConfirmStop=False",
 ]
@@ -78,7 +79,8 @@ def drop_detail(base):
 def run_runner(runner, dol, rtc, limit, base, detalle=None):
     drop_detail(base)
     cmd = [runner, "--rtc", str(rtc), "--ciclos", str(limit), "--huella", base + ".huella",
-           "--puntos", base + ".puntos", "--estado-gx", base + ".gx", dol]
+           "--puntos", base + ".puntos", "--estado-gx", base + ".gx", "--vertices", base + ".vtx",
+           dol]
     if detalle:
         cmd[1:1] = ["--detalle", detalle]
     p = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
@@ -89,6 +91,8 @@ def run_runner(runner, dol, rtc, limit, base, detalle=None):
 
 def run_dolphin(dolphin, dol, rtc, count, base, work, detalle=None):
     drop_detail(base)
+    if os.path.exists(base + ".vtx"):      # Dolphin lo crea recién al dibujar
+        os.remove(base + ".vtx")
     user = os.path.join(work, "dolphin-user")
     shutil.rmtree(user, ignore_errors=True)
     os.makedirs(os.path.join(user, "Maps"))
@@ -102,7 +106,8 @@ def run_dolphin(dolphin, dol, rtc, count, base, work, detalle=None):
     if os.path.exists(mapfile):
         shutil.copy(mapfile, os.path.join(user, "Maps", stem + ".map"))
     env = dict(os.environ, GCPS3_HUELLA=base + ".huella", GCPS3_PUNTOS=base + ".puntos",
-               GCPS3_LIMITE=str(count), GCPS3_ESTADO_GX=base + ".gx")
+               GCPS3_LIMITE=str(count), GCPS3_ESTADO_GX=base + ".gx",
+               GCPS3_VERTICES=base + ".vtx")
     env.pop("GCPS3_DETALLE", None)
     if detalle:
         env["GCPS3_DETALLE"] = detalle
@@ -139,6 +144,49 @@ def compare_estado(ra, da):
     return False
 
 
+def read_vertices(path):
+    """Las líneas de vértices (vacío si Dolphin no dibujó nada)."""
+    if not os.path.exists(path):
+        return []
+    with open(path, encoding="utf-8") as f:
+        return [l.rstrip("\n") for l in f if l.strip() and not l.startswith("#")]
+
+
+def vertex_fields(line):
+    """Los campos de una línea de vértice con su nombre."""
+    t = line.split()
+    names = ["v.x", "v.y", "v.z", "p.x", "p.y", "p.z", "p.w"]
+    names += [f"n{k}.{c}" for k in range(3) for c in "xyz"]
+    names += ["color0", "color1"]
+    vals = t[1:4] + t[5:9] + t[10:19] + t[20:22]
+    out = dict(zip(names, vals))
+    if len(t) > 22:
+        out["ntex"] = t[22]
+        for k, i in enumerate(range(23, len(t), 3)):
+            for c, v in zip("stq", t[i:i + 3]):
+                out[f"t{k}.{c}"] = v
+    return out
+
+
+def compare_vertices(ra, da):
+    """Compara los vértices de las dos corridas; True si son los mismos."""
+    a, b = read_vertices(ra + ".vtx"), read_vertices(da + ".vtx")
+    if a == b:
+        print(f"   vértices iguales ({len(a)})")
+        return True
+    i = next((k for k, (x, y) in enumerate(zip(a, b)) if x != y), min(len(a), len(b)))
+    print(f"   vértices DISTINTOS: {len(a)} en el runner, {len(b)} en Dolphin; desde el {i}")
+    if i < len(a) and i < len(b):
+        fa, fb = vertex_fields(a[i]), vertex_fields(b[i])
+        for k in fb:
+            if fa.get(k) != fb[k]:
+                print(f"     {k}: runner {fa.get(k)}, dolphin {fb[k]}")
+    for name, lines in (("runner", a), ("dolphin", b)):
+        if i < len(lines):
+            print(f"     {name}: {lines[i]}")
+    return False
+
+
 def compare(dol, o):
     stem = os.path.splitext(os.path.basename(dol))[0]
     ra, da = os.path.join(o.trabajo, stem + ".runner"), os.path.join(o.trabajo, stem + ".dolphin")
@@ -157,7 +205,8 @@ def compare(dol, o):
         return False
     if idx is not None:
         return False
-    if not compare_estado(ra, da):
+    same_estado = compare_estado(ra, da)
+    if not compare_vertices(ra, da) or not same_estado:
         return False
     if o.referencia:
         os.makedirs(o.referencia, exist_ok=True)
@@ -173,7 +222,17 @@ def compare(dol, o):
             f.write(f"# gc-ps3 estado gx v1: Dolphin cf5cb7ef al final de la traza (tools/dolphin-trace)\n")
             f.write(f"# dol {stem}.dol\n# reloj {o.rtc}\n# instrucciones {m}\n")
             f.writelines(l + "\n" for l in read_estado(da + ".gx"))
-        print(f"   referencia en {os.path.relpath(out, ROOT)} y {os.path.relpath(gx, ROOT)}")
+        vtx = os.path.join(o.referencia, stem + ".vtx.txt")
+        vertices = read_vertices(da + ".vtx")
+        if vertices:
+            with open(vtx, "w", encoding="utf-8") as f:
+                f.write(f"# gc-ps3 vertices v1: Dolphin cf5cb7ef, video por software (tools/dolphin-trace)\n")
+                f.write(f"# dol {stem}.dol\n# reloj {o.rtc}\n# instrucciones {m}\n")
+                f.writelines(l + "\n" for l in vertices)
+        elif os.path.exists(vtx):
+            os.remove(vtx)
+        print(f"   referencia en {os.path.relpath(out, ROOT)}, {os.path.relpath(gx, ROOT)}"
+              + (f" y {os.path.relpath(vtx, ROOT)}" if vertices else ""))
     return True
 
 

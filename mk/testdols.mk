@@ -15,11 +15,12 @@ DOL_CFLAGS := -std=c11 -mcpu=750 -mhard-float -O2 -ffreestanding -fno-builtin -f
               -fno-tree-loop-distribute-patterns -ffp-contract=off -Wall -Wextra -Werror \
               -Wa,-m750cl -Itests/dol
 DOL_LDFLAGS := -nostdlib -static -T tests/dol/link.ld -Wl,--build-id=none
-TESTDOLS    := hola cpu timer pantalla contador hw gx_fifo
+TESTDOLS    := hola cpu timer pantalla contador hw gx_fifo gx_tri
 TESTDOLS_HOSTED := hola cpu pantalla       # los que también compilan en la PC
 DOL_VIDEO   := pantalla contador           # los que usan tests/dol/video.c
-DOL_GXLIB   := gx_fifo                     # los que usan tests/dol/gxlib.c (Fase 2)
-TESTDOLS_EXIT := hola cpu timer hw gx_fifo # terminan con exit(0)
+DOL_GXLIB   := gx_fifo gx_tri              # los que usan tests/dol/gxlib.c (Fase 2)
+DOL_GXVTX   := gx_tri                      # y tests/dol/gxvtx.c (vértices, etapa B)
+TESTDOLS_EXIT := hola cpu timer hw gx_fifo gx_tri  # terminan con exit(0)
 TESTDOLS_STAY := pantalla contador         # se quedan mostrando algo
 
 DOL_OUT  := tests/dol/bin
@@ -51,6 +52,7 @@ $(DOL_TMP)/%.elf: $(DOL_RT) $(DOL_TMP)/%.o tests/dol/link.ld
 
 $(DOL_VIDEO:%=$(DOL_TMP)/%.elf): $(DOL_TMP)/video.o
 $(DOL_GXLIB:%=$(DOL_TMP)/%.elf): $(DOL_TMP)/gxlib.o
+$(DOL_GXVTX:%=$(DOL_TMP)/%.elf): $(DOL_TMP)/gxvtx.o
 
 $(DOL_OUT)/%.dol: $(DOL_TMP)/%.elf tools/elf2dol.py
 	@mkdir -p $(dir $@)

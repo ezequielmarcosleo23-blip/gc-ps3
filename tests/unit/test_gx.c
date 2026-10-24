@@ -505,7 +505,7 @@ static void test_vertex_size(void)
     teardown();
 }
 
-/* Las primitivas se saltan con su tamaño; lo que sigue se decodifica bien */
+/* Las primitivas se leen con su tamaño; lo que sigue se decodifica bien */
 static void test_primitive_skip(void)
 {
     CHECK(boot() == 0);
@@ -714,7 +714,7 @@ const test_case_t gx_tests[] = {
     { "gx: comandos de CP, BP con máscara, XF, NOPs y desconocidos", test_commands },
     { "gx: cargas de XF y cargas indexadas", test_xf_loads },
     { "gx: tamaño de vértice según VCD y VAT", test_vertex_size },
-    { "gx: primitivas saltadas por su tamaño", test_primitive_skip },
+    { "gx: primitivas leídas por su tamaño", test_primitive_skip },
     { "gx: display lists", test_display_list },
     { "gx: un comando que cruza bloques del FIFO", test_command_across_blocks },
     { "gx: token del PE con y sin interrupción", test_pe_token },
