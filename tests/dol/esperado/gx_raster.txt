@@ -1,0 +1,9 @@
+gx_raster: triangulos, recorte, lineas y puntos
+gx_raster: estado inicial
+gx_raster: 1. recorte
+gx_raster: 2. culling
+gx_raster: 3. lineas
+gx_raster: 4. puntos
+gx_raster: 5. sin deteccion de recorte
+gx_raster: 6. proyeccion ortografica
+gx_raster: 7 tokens; OK

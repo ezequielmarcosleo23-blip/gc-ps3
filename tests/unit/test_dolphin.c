@@ -26,7 +26,8 @@
  *
  * Si hay tests/dol/dolphin/<prueba>.gx.txt, el estado de GX al final (FIFO,
  * BP, CP y XF, src/gx/estado.c) también tiene que ser el de Dolphin; si hay
- * <prueba>.vtx.txt, también cada vértice transformado, bit a bit.
+ * <prueba>.vtx.txt, .tri.txt o .cop.txt, también cada vértice transformado,
+ * cada triángulo que llega al rasterizador y cada copia del EFB.
  *
  * GCPS3_REF_MAX=N revisa solo hasta la instrucción N (make test-be, que corre
  * en QEMU, usa 2 millones); entonces no se mira el estado de GX.
@@ -38,6 +39,7 @@
 #include "core/log.h"
 #include "core/system.h"
 #include "cpu/huella.h"
+#include "gx/raster.h"
 #include "test.h"
 
 #define POINTS_MAX 4096
@@ -137,77 +139,113 @@ static int check_estado(const char *name)
     return 0;
 }
 
-/* ---- vértices ---- */
+/* ---- volcados de vértices, triángulos y copias ---- */
 
-static char *vtx_want;                  /* las líneas de la referencia, sin comentarios */
-static size_t vtx_at, vtx_len;
-static uint64_t vtx_seen, vtx_bad;      /* vtx_bad: 1 + el primero distinto, o 0 */
+/* Una referencia de texto que se compara línea por línea mientras corre */
+typedef struct dump_check {
+    const char *ext, *what;             /* "vtx", "el vértice" */
+    char       *want;                   /* las líneas de la referencia, sin comentarios */
+    size_t      at, len;
+    uint64_t    seen, bad;              /* bad: 1 + la primera distinta, o 0 */
+    int         on;
+} dump_check_t;
+
+static dump_check_t vtx_check = { "vtx", "el vértice", NULL, 0, 0, 0, 0, 0 };
+static dump_check_t tri_check = { "tri", "el triángulo", NULL, 0, 0, 0, 0, 0 };
+static dump_check_t cop_check = { "cop", "la línea de copias", NULL, 0, 0, 0, 0, 0 };
+
+static void dump_feed(dump_check_t *d, const char *text)
+{
+    const size_t n = strlen(text);
+    if (!d->bad && (d->at + n >= d->len || memcmp(d->want + d->at, text, n) != 0 ||
+                    d->want[d->at + n] != '\n')) {
+        d->bad = d->seen + 1;
+        fprintf(stderr, "    gc-ps3:  %.100s\n", text);
+    }
+    if (!d->bad)
+        d->at += n + 1;
+    d->seen++;
+}
+
+/* Carga tests/dol/dolphin/<prueba>.<ext>.txt si existe: 1 si hay referencia */
+static int dump_load(dump_check_t *d, const char *name)
+{
+    char path[256], line[4096];
+    snprintf(path, sizeof path, "tests/dol/dolphin/%s.%s.txt", name, d->ext);
+    d->on = 0;
+    FILE *f = fopen(path, "r");
+    if (!f)
+        return 0;
+    size_t cap = 1u << 16;
+    d->want = malloc(cap);
+    d->len = 0;
+    while (d->want && fgets(line, sizeof line, f)) {
+        const size_t n = strlen(line);
+        if (line[0] == '#')
+            continue;
+        if (d->len + n + 1 > cap) {
+            char *bigger = realloc(d->want, cap * 2);
+            if (!bigger) {
+                free(d->want);
+                d->want = NULL;
+                break;
+            }
+            d->want = bigger;
+            cap *= 2;
+        }
+        memcpy(d->want + d->len, line, n);
+        d->len += n;
+    }
+    fclose(f);
+    if (d->want)
+        d->want[d->len] = '\0';
+    d->at = 0;
+    d->seen = d->bad = 0;
+    d->on = d->want != NULL;
+    return d->on;
+}
+
+/* 1 si no había referencia o si las líneas fueron las de la referencia, todas */
+static int dump_finish(dump_check_t *d, const char *name)
+{
+    int ok = 1;
+    if (d->on && (d->bad || d->at != d->len)) {
+        ok = 0;
+        if (d->bad) {
+            fprintf(stderr, "  %s: %s %llu es distinto del de Dolphin\n    Dolphin: %.100s\n", name,
+                    d->what, (unsigned long long)(d->bad - 1),
+                    d->at < d->len ? d->want + d->at : "(no hay más)");
+        } else {
+            fprintf(stderr, "  %s: %llu líneas de %s, Dolphin tiene más\n", name,
+                    (unsigned long long)d->seen, d->ext);
+        }
+    }
+    free(d->want);
+    d->want = NULL;
+    d->on = 0;
+    return ok;
+}
 
 static void vertex_line(void *ctx, const struct gx_vtx_out *v, uint32_t ntex)
 {
     char text[GC_GX_VERTEX_TEXT];
     (void)ctx;
     gc_gx_vertex_text(v, ntex, text);
-    const size_t n = strlen(text);
-    if (!vtx_bad && (vtx_at + n >= vtx_len || memcmp(vtx_want + vtx_at, text, n) != 0 ||
-                     vtx_want[vtx_at + n] != '\n')) {
-        vtx_bad = vtx_seen + 1;
-        fprintf(stderr, "    gc-ps3:  %.100s\n", text);
-    }
-    if (!vtx_bad)
-        vtx_at += n + 1;
-    vtx_seen++;
+    dump_feed(&vtx_check, text);
 }
 
-/* Carga <prueba>.vtx.txt si existe: 1 si hay referencia */
-static int load_vertices(const char *name)
+static void triangle_line(void *ctx, const struct gx_rvtx *const v[3], uint32_t ntex)
 {
-    char path[256], line[GC_GX_VERTEX_TEXT + 8];
-    snprintf(path, sizeof path, "tests/dol/dolphin/%s.vtx.txt", name);
-    FILE *f = fopen(path, "r");
-    if (!f)
-        return 0;
-    size_t cap = 1u << 16;
-    vtx_want = malloc(cap);
-    vtx_len = 0;
-    while (vtx_want && fgets(line, sizeof line, f)) {
-        const size_t n = strlen(line);
-        if (line[0] == '#')
-            continue;
-        if (vtx_len + n + 1 > cap) {
-            char *bigger = realloc(vtx_want, cap * 2);
-            if (!bigger) {
-                free(vtx_want);
-                vtx_want = NULL;
-                break;
-            }
-            vtx_want = bigger;
-            cap *= 2;
-        }
-        memcpy(vtx_want + vtx_len, line, n);
-        vtx_len += n;
-    }
-    fclose(f);
-    if (vtx_want)
-        vtx_want[vtx_len] = '\0';
-    vtx_at = 0;
-    vtx_seen = vtx_bad = 0;
-    return vtx_want != NULL;
+    char text[GC_GX_TRIANGLE_TEXT];
+    (void)ctx;
+    gc_gx_triangle_text(v, ntex, text);
+    dump_feed(&tri_check, text);
 }
 
-/* 1 si los vértices fueron los de la referencia, todos */
-static int check_vertices(const char *name)
+static void copy_line(void *ctx, const char *text)
 {
-    if (!vtx_bad && vtx_at == vtx_len)
-        return 1;
-    if (vtx_bad) {
-        const char *at = vtx_want + vtx_at;
-        fprintf(stderr, "  %s: el vértice %llu es distinto del de Dolphin\n    Dolphin: %.100s\n", name,
-                (unsigned long long)(vtx_bad - 1), vtx_at < vtx_len ? at : "(no hay más)");
-    } else {
-        fprintf(stderr, "  %s: %llu vértices, Dolphin tiene más\n", name, (unsigned long long)vtx_seen);
-    }
-    return 0;
+    (void)ctx;
+    dump_feed(&cop_check, text);
 }
 
 /* Lee la referencia: reloj e instrucciones de la cabecera y los puntos */
@@ -271,9 +309,14 @@ static int check_dol(const char *name)
             gc_system_load_map(&sys, map, map_len);
             sys.hle.report = ignore_line;
             sys.cpu.trace = step;
-            const int vertices = npoints == all && load_vertices(name);
-            if (vertices)
-                sys.gx.vertex_cb = vertex_line;
+            if (npoints == all) {
+                if (dump_load(&vtx_check, name))
+                    sys.gx.vertex_cb = vertex_line;
+                if (dump_load(&tri_check, name))
+                    sys.gx.triangle_cb = triangle_line;
+                if (dump_load(&cop_check, name))
+                    sys.gx.copy_cb = copy_line;
+            }
             seen = chain = 0;
             next_point = 0;
             failed_point = -1;
@@ -281,10 +324,11 @@ static int check_dol(const char *name)
             ok = failed_point < 0 && next_point == npoints;
             if (ok && npoints == all)
                 ok = check_estado(name);
-            if (ok && vertices)
-                ok = check_vertices(name);
-            free(vtx_want);
-            vtx_want = NULL;
+            if (cop_check.on)
+                gc_gx_efb_final(&sys.gx);
+            ok = dump_finish(&vtx_check, name) && ok;
+            ok = dump_finish(&tri_check, name) && ok;
+            ok = dump_finish(&cop_check, name) && ok;
             if (failed_point >= 0) {
                 const uint64_t from = failed_point ? points[failed_point - 1].n : 0;
                 fprintf(stderr, "  %s: distinto de Dolphin entre las instrucciones %llu y %llu "
@@ -345,6 +389,7 @@ static void test_pantalla(void) { CHECK(check_dol("pantalla")); }
 static void test_contador(void) { CHECK(check_dol("contador")); }
 static void test_gx_fifo(void)  { CHECK(check_dol("gx_fifo")); }
 static void test_gx_tri(void)   { CHECK(check_dol("gx_tri")); }
+static void test_gx_raster(void) { CHECK(check_dol("gx_raster")); }
 
 const test_case_t dolphin_tests[] = {
     { "huella: formato v1 (el mismo del parche de Dolphin)", test_huella_format },
@@ -356,5 +401,6 @@ const test_case_t dolphin_tests[] = {
     { "dolphin contador: 30 millones de instrucciones iguales a Dolphin", test_contador },
     { "dolphin gx_fifo: cada instrucción y el estado de GX iguales a Dolphin", test_gx_fifo },
     { "dolphin gx_tri: cada instrucción, el estado de GX y cada vértice iguales a Dolphin", test_gx_tri },
+    { "dolphin gx_raster: cada instrucción, vértice y triángulo iguales a Dolphin", test_gx_raster },
     { NULL, NULL },
 };

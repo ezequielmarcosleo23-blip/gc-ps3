@@ -26,7 +26,7 @@ index 82650ff1a0..a0261b9d12 100644
    {
      ASSERT(!Core::WantsDeterminism());
 diff --git a/Source/Core/Core/PowerPC/Interpreter/Interpreter.cpp b/Source/Core/Core/PowerPC/Interpreter/Interpreter.cpp
-index affdc43936..6c2b19340a 100644
+index affdc43936..06475a5591 100644
 --- a/Source/Core/Core/PowerPC/Interpreter/Interpreter.cpp
 +++ b/Source/Core/Core/PowerPC/Interpreter/Interpreter.cpp
 @@ -4,6 +4,8 @@
@@ -38,7 +38,7 @@ index affdc43936..6c2b19340a 100644
  #include <string>
  
  #include <fmt/format.h>
-@@ -18,11 +20,238 @@
+@@ -18,11 +20,241 @@
  #include "Core/Debugger/Debugger_SymbolMap.h"
  #include "Core/HLE/HLE.h"
  #include "Core/HW/CPU.h"
@@ -49,6 +49,7 @@ index affdc43936..6c2b19340a 100644
  #include "Core/PowerPC/PowerPC.h"
  #include "Core/System.h"
 +#include "VideoCommon/BPMemory.h"
++#include "VideoCommon/BPStructs.h"
 +#include "VideoCommon/CPMemory.h"
 +#include "VideoCommon/CommandProcessor.h"
 +#include "VideoCommon/XFMemory.h"
@@ -65,6 +66,7 @@ index affdc43936..6c2b19340a 100644
 +//   GCPS3_ESTADO_GX=archivo  al salir, el estado de GX en texto (src/gx/estado.c
 +//                          en gc-ps3): FIFO del CP y del PI, gather pipe y las
 +//                          palabras distintas de cero de BP, CP y XF
++//   GCPS3_COPIAS=archivo   cada copia del EFB y, al salir, el EFB (BPStructs.cpp)
 +// Con la traza activa el intérprete avanza instrucción por instrucción, como el
 +// paso a paso del depurador (SingleStep): 1 ciclo por instrucción y los eventos
 +// y las interrupciones entre una y otra, el mismo modelo que gc-ps3.
@@ -224,6 +226,7 @@ index affdc43936..6c2b19340a 100644
 +{
 +  if (const char* gx = std::getenv("GCPS3_ESTADO_GX"))
 +    EstadoGX(gx);
++  GCPS3Copias::Fin();
 +  if (s_trace.puntos && s_trace.n % PUNTOS_CADA != 0)
 +    std::fprintf(s_trace.puntos, "%llu %08x %016llx\n", static_cast<unsigned long long>(s_trace.n),
 +                 s_trace.last_pc, static_cast<unsigned long long>(s_trace.cadena));
@@ -277,7 +280,7 @@ index affdc43936..6c2b19340a 100644
  
  namespace
  {
-@@ -130,6 +359,8 @@ int Interpreter::SingleStepInner()
+@@ -130,6 +362,8 @@ int Interpreter::SingleStepInner()
  
    m_ppc_state.npc = m_ppc_state.pc + sizeof(UGeckoInstruction);
    m_prev_inst.hex = m_mmu.Read_Opcode(m_ppc_state.pc);
@@ -286,7 +289,7 @@ index affdc43936..6c2b19340a 100644
  
    const GekkoOPInfo* opinfo = PPCTables::GetOpInfo(m_prev_inst, m_ppc_state.pc);
  
-@@ -230,6 +461,15 @@ void Interpreter::Run()
+@@ -230,6 +464,15 @@ void Interpreter::Run()
    auto& core_timing = m_system.GetCoreTiming();
    auto& cpu = m_system.GetCPU();
    auto& power_pc = m_system.GetPowerPC();
@@ -358,6 +361,108 @@ index 975f408068..462d6f358d 100644
  
    if (inst.OE)
      ppc_state.SetXER_OV(HasAddOverflowed(a, b, result));
+diff --git a/Source/Core/VideoBackends/Software/Rasterizer.cpp b/Source/Core/VideoBackends/Software/Rasterizer.cpp
+index 2839e05b73..f9261839a4 100644
+--- a/Source/Core/VideoBackends/Software/Rasterizer.cpp
++++ b/Source/Core/VideoBackends/Software/Rasterizer.cpp
+@@ -4,6 +4,8 @@
+ #include "VideoBackends/Software/Rasterizer.h"
+ 
+ #include <algorithm>
++#include <cstdio>
++#include <cstdlib>
+ #include <cstring>
+ #include <vector>
+ 
+@@ -503,11 +505,74 @@ static void DrawTriangleFrontFace(const OutputVertexData* v0, const OutputVertex
+   }
+ }
+ 
++// gc-ps3: con GCPS3_TRIANGULOS=archivo, cada triángulo que llega al
++// rasterizador (recortado, en la pantalla): por vértice x, y, z de la
++// pantalla, w proyectado, los 2 colores y las coordenadas de textura, con los
++// bits de cada float (NaN como 7fc00000). gc-ps3 escribe lo mismo.
++namespace GCPS3Triangulos
++{
++static FILE* File()
++{
++  static bool init = false;
++  static FILE* file = nullptr;
++  if (!init)
++  {
++    init = true;
++    if (const char* path = std::getenv("GCPS3_TRIANGULOS"))
++    {
++      file = std::fopen(path, "w");
++      if (file)
++        std::fprintf(file, "# gc-ps3 triangulos v1\n");
++    }
++  }
++  return file;
++}
++
++static u32 Bits(float f)
++{
++  if (f != f)
++    return 0x7fc00000u;
++  u32 u;
++  std::memcpy(&u, &f, sizeof(u));
++  return u;
++}
++
++static void Write(const OutputVertexData* const v[3])
++{
++  FILE* f = File();
++  if (!f)
++    return;
++  const u32 ntex = bpmem.genMode.numtexgens;
++  std::fprintf(f, "t%u", ntex);
++  for (int k = 0; k < 3; k++)
++  {
++    std::fprintf(f, " v %08x %08x %08x %08x", Bits(v[k]->screenPosition.x),
++                 Bits(v[k]->screenPosition.y), Bits(v[k]->screenPosition.z),
++                 Bits(v[k]->projectedPosition.w));
++    for (const auto& c : v[k]->color)
++      std::fprintf(f, " %02x%02x%02x%02x", c[0], c[1], c[2], c[3]);
++    for (u32 i = 0; i < ntex && i < 8; i++)
++      std::fprintf(f, " %08x %08x %08x", Bits(v[k]->texCoords[i].x), Bits(v[k]->texCoords[i].y),
++                   Bits(v[k]->texCoords[i].z));
++  }
++  std::fprintf(f, "\n");
++}
++}  // namespace GCPS3Triangulos
++
++void GCPS3FlushTriangles()
++{
++  if (FILE* f = GCPS3Triangulos::File())
++    std::fflush(f);
++}
++
+ void DrawTriangleFrontFace(const OutputVertexData* v0, const OutputVertexData* v1,
+                            const OutputVertexData* v2)
+ {
+   INCSTAT(g_stats.this_frame.num_triangles_drawn);
+ 
++  const OutputVertexData* const gcps3_v[3] = {v0, v1, v2};
++  GCPS3Triangulos::Write(gcps3_v);
++
+   for (const auto& scissor : scissors)
+     DrawTriangleFrontFace(v0, v1, v2, scissor);
+ }
+diff --git a/Source/Core/VideoBackends/Software/Rasterizer.h b/Source/Core/VideoBackends/Software/Rasterizer.h
+index d9cd4a6b11..074497fbce 100644
+--- a/Source/Core/VideoBackends/Software/Rasterizer.h
++++ b/Source/Core/VideoBackends/Software/Rasterizer.h
+@@ -19,6 +19,9 @@ void DrawTriangleFrontFace(const OutputVertexData* v0, const OutputVertexData* v
+ 
+ void SetTevKonstColors();
+ 
++// gc-ps3: vacía el archivo de GCPS3_TRIANGULOS (Dolphin sale con _Exit)
++void GCPS3FlushTriangles();
++
+ struct RasterBlockPixel
+ {
+   float InvW;
 diff --git a/Source/Core/VideoBackends/Software/SWGfx.cpp b/Source/Core/VideoBackends/Software/SWGfx.cpp
 index 7004c50864..a92c9d190b 100644
 --- a/Source/Core/VideoBackends/Software/SWGfx.cpp
@@ -391,7 +496,7 @@ index 7004c50864..a92c9d190b 100644
    return {std::max(context->GetBackBufferWidth(), 1u), std::max(context->GetBackBufferHeight(), 1u),
            1.0f, AbstractTextureFormat::RGBA8};
 diff --git a/Source/Core/VideoBackends/Software/SWVertexLoader.cpp b/Source/Core/VideoBackends/Software/SWVertexLoader.cpp
-index 8759de597a..bab18ee815 100644
+index 8759de597a..8d384d681b 100644
 --- a/Source/Core/VideoBackends/Software/SWVertexLoader.cpp
 +++ b/Source/Core/VideoBackends/Software/SWVertexLoader.cpp
 @@ -4,7 +4,11 @@
@@ -497,20 +602,29 @@ index 8759de597a..bab18ee815 100644
      // assemble and rasterize the primitive
      m_setup_unit.SetupVertex();
  
-@@ -88,6 +162,8 @@ void SWVertexLoader::DrawCurrentBatch(u32 base_index, u32 num_indices, u32 base_
+@@ -88,6 +162,9 @@ void SWVertexLoader::DrawCurrentBatch(u32 base_index, u32 num_indices, u32 base_
    }
  
    INCSTAT(g_stats.this_frame.num_drawn_objects);
 +  if (gcps3_file)
 +    std::fflush(gcps3_file);  // Dolphin sale con _Exit al cortar la traza
++  Rasterizer::GCPS3FlushTriangles();
  }
  
  void SWVertexLoader::SetFormat()
 diff --git a/Source/Core/VideoBackends/Software/SWmain.cpp b/Source/Core/VideoBackends/Software/SWmain.cpp
-index 66c96f5a16..efa703c56c 100644
+index 66c96f5a16..ed24ecbb0d 100644
 --- a/Source/Core/VideoBackends/Software/SWmain.cpp
 +++ b/Source/Core/VideoBackends/Software/SWmain.cpp
-@@ -91,9 +91,15 @@ void VideoSoftware::InitBackendInfo(const WindowSystemInfo& wsi)
+@@ -14,6 +14,7 @@
+ #include "VideoBackends/Software/Rasterizer.h"
+ #include "VideoBackends/Software/SWBoundingBox.h"
+ #include "VideoBackends/Software/SWEfbInterface.h"
++#include "VideoCommon/BPStructs.h"
+ #include "VideoBackends/Software/SWGfx.h"
+ #include "VideoBackends/Software/SWOGLWindow.h"
+ #include "VideoBackends/Software/SWVertexLoader.h"
+@@ -91,12 +92,19 @@ void VideoSoftware::InitBackendInfo(const WindowSystemInfo& wsi)
  
  bool VideoSoftware::Initialize(const WindowSystemInfo& wsi)
  {
@@ -529,3 +643,200 @@ index 66c96f5a16..efa703c56c 100644
  
    Clipper::Init();
    Rasterizer::Init();
++  GCPS3Copias::efb_pixel = EfbInterface::GetPixelPointer;  // gc-ps3
+ 
+   return InitializeShared(std::make_unique<SWGfx>(std::move(window)),
+                           std::make_unique<SWVertexLoader>(), std::make_unique<PerfQuery>(),
+diff --git a/Source/Core/VideoCommon/BPStructs.cpp b/Source/Core/VideoCommon/BPStructs.cpp
+index 1bcfb84206..ee32e89f01 100644
+--- a/Source/Core/VideoCommon/BPStructs.cpp
++++ b/Source/Core/VideoCommon/BPStructs.cpp
+@@ -4,6 +4,8 @@
+ #include "VideoCommon/BPStructs.h"
+ 
+ #include <algorithm>
++#include <cstdio>
++#include <cstdlib>
+ #include <cstring>
+ #include <string>
+ 
+@@ -52,6 +54,109 @@ void BPInit()
+   bpmem.bpMask = 0xFFFFFF;
+ }
+ 
++namespace GCPS3Copias
++{
++u8* (*efb_pixel)(u16 x, u16 y, bool depth) = nullptr;
++
++static FILE* File()
++{
++  static bool init = false;
++  static FILE* file = nullptr;
++  if (!init)
++  {
++    init = true;
++    if (const char* path = std::getenv("GCPS3_COPIAS"))
++    {
++      file = std::fopen(path, "w");
++      if (file)
++        std::fprintf(file, "# gc-ps3 copias v1\n");
++    }
++  }
++  return file;
++}
++
++// CRC-32 de zlib (polinomio 0xEDB88320), el de gc_crc32
++static u32 Crc(u32 crc, const u8* p, size_t n)
++{
++  static u32 table[256];
++  if (!table[1])
++  {
++    for (u32 i = 0; i < 256; i++)
++    {
++      u32 c = i;
++      for (int k = 0; k < 8; k++)
++        c = (c & 1) ? 0xEDB88320u ^ (c >> 1) : c >> 1;
++      table[i] = c;
++    }
++  }
++  crc = ~crc;
++  while (n--)
++    crc = table[(crc ^ *p++) & 0xFF] ^ (crc >> 8);
++  return ~crc;
++}
++
++// El EFB de [x0, x1) × [y0, y1): los 3 bytes de color de cada píxel, fila por
++// fila, y después los 3 de Z
++static void EfbCrc(int x0, int y0, int x1, int y1, u32* color, u32* depth)
++{
++  *color = *depth = 0;
++  if (!efb_pixel)
++    return;
++  for (int d = 0; d < 2; d++)
++  {
++    u32 crc = 0;
++    for (int y = y0; y < y1; y++)
++      for (int x = x0; x < x1; x++)
++        crc = Crc(crc, efb_pixel(u16(x), u16(y), d != 0), 3);
++    (d ? *depth : *color) = crc;
++  }
++}
++
++static void Copy(const MathUtil::Rectangle<s32>& raw, int x0, int y0, int x1, int y1, u32 dest,
++                 u32 stride, u32 bytes_per_row, u32 rows, bool valid)
++{
++  FILE* f = File();
++  if (!f)
++    return;
++  std::fprintf(f, "c %u %06x src %d %d %d %d dst %08x %u", unsigned(bpmem.zcontrol.pixel_format.Value()),
++               bpmem.triggerEFBCopy.Hex & 0xFFFFFF, raw.left, raw.top, raw.GetWidth(),
++               raw.GetHeight(), dest, stride);
++  if (!valid)
++  {
++    std::fprintf(f, " fuera\n");
++    return;
++  }
++  u32 color, depth;
++  EfbCrc(x0, y0, x1, y1, &color, &depth);
++  std::fprintf(f, " efb %08x %08x", color, depth);
++  if (rows == 0)
++  {
++    std::fprintf(f, " ram 0 00000000\n");
++    return;
++  }
++  auto& memory = Core::System::GetInstance().GetMemory();
++  u32 crc = 0;
++  for (u32 r = 0; r < rows; r++)
++  {
++    const u8* p = memory.GetPointerForRange(dest + r * stride, bytes_per_row);
++    if (p)
++      crc = Crc(crc, p, bytes_per_row);
++  }
++  std::fprintf(f, " ram %u %08x\n", bytes_per_row * rows, crc);
++}
++
++void Fin()
++{
++  FILE* f = File();
++  if (!f)
++    return;
++  u32 color, depth;
++  EfbCrc(0, 0, EFB_WIDTH, EFB_HEIGHT, &color, &depth);
++  std::fprintf(f, "efb %08x %08x\n", color, depth);
++  std::fclose(f);
++}
++}  // namespace GCPS3Copias
++
+ static void BPWritten(PixelShaderManager& pixel_shader_manager, XFStateManager& xf_state_manager,
+                       GeometryShaderManager& geometry_shader_manager, const BPCmd& bp,
+                       int cycles_into_future)
+@@ -277,6 +382,7 @@ static void BPWritten(PixelShaderManager& pixel_shader_manager, XFStateManager&
+ 
+       if (u32(srcRect.left) >= EFB_WIDTH || u32(srcRect.top) >= EFB_HEIGHT)
+       {
++        GCPS3Copias::Copy(srcRect, 0, 0, 0, 0, destAddr, destStride, 0, 0, false);
+         // This is not a sane src rectangle, it doesn't touch any valid image data at all
+         // Just ignore it
+         // Apparently Mario Kart Wii in wifi mode can generate a deformed EFB copy of size 4x4
+@@ -297,6 +403,11 @@ static void BPWritten(PixelShaderManager& pixel_shader_manager, XFStateManager&
+ 
+     const u32 copy_width = srcRect.GetWidth();
+     const u32 copy_height = srcRect.GetHeight();
++    // gc-ps3: el rectángulo pedido, antes del recorte a los bordes del EFB
++    const MathUtil::Rectangle<s32> gcps3_raw(
++        bpmem.copyTexSrcXY.x, bpmem.copyTexSrcXY.y,
++        bpmem.copyTexSrcXY.x + bpmem.copyTexSrcWH.x + 1, bpmem.copyTexSrcXY.y + bpmem.copyTexSrcWH.y + 1);
++    u32 gcps3_row = 0, gcps3_rows = 0;
+ 
+     if (destStride != 0)
+     {
+@@ -325,6 +436,8 @@ static void BPWritten(PixelShaderManager& pixel_shader_manager, XFStateManager&
+         framebuffer_copy_data.copy_height = copy_height;
+         auto resolved_data = g_texture_cache->ResolveFramebufferCopyData(framebuffer_copy_data);
+         g_texture_cache->CopyRenderTargetToTexture(std::ref(resolved_data));
++        gcps3_row = resolved_data.bytes_per_row;
++        gcps3_rows = resolved_data.num_blocks_y;
+       }
+       else
+       {
+@@ -357,6 +470,8 @@ static void BPWritten(PixelShaderManager& pixel_shader_manager, XFStateManager&
+         auto resolved_data = g_texture_cache->ResolveFramebufferCopyData(framebuffer_copy_data);
+ 
+         g_texture_cache->CopyRenderTargetToTexture(std::ref(resolved_data));
++        gcps3_row = resolved_data.bytes_per_row;
++        gcps3_rows = resolved_data.num_blocks_y;
+ 
+         auto& system = Core::System::GetInstance();
+ 
+@@ -391,6 +506,10 @@ static void BPWritten(PixelShaderManager& pixel_shader_manager, XFStateManager&
+       }
+     }
+ 
++    // gc-ps3: la copia ya está en la RAM y el EFB todavía no se borró
++    GCPS3Copias::Copy(gcps3_raw, srcRect.left, srcRect.top, srcRect.right, srcRect.bottom, destAddr,
++                      destStride, gcps3_row, gcps3_rows, true);
++
+     // Clear the rectangular region after copying it.
+     if (PE_copy.clear)
+     {
+diff --git a/Source/Core/VideoCommon/BPStructs.h b/Source/Core/VideoCommon/BPStructs.h
+index 1161850447..fe747d070d 100644
+--- a/Source/Core/VideoCommon/BPStructs.h
++++ b/Source/Core/VideoCommon/BPStructs.h
+@@ -3,5 +3,16 @@
+ 
+ #pragma once
+ 
++#include "Common/CommonTypes.h"
++
+ void BPInit();
+ void BPReload();
++
++// gc-ps3: con GCPS3_COPIAS=archivo, una línea por cada copia del EFB (BP 0x52)
++// y al final de la traza el EFB entero, con CRC-32 de sus bytes (src/gx en
++// gc-ps3, docs/traza-dolphin.md). El video por software da el acceso al EFB.
++namespace GCPS3Copias
++{
++extern u8* (*efb_pixel)(u16 x, u16 y, bool depth);
++void Fin();
++}  // namespace GCPS3Copias

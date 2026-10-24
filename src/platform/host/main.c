@@ -26,6 +26,8 @@
  *     --estado-gx ARCHIVO  al terminar, el estado de GX en texto (FIFO, BP, CP, XF)
  *     --vertices ARCHIVO   cada vértice transformado, en texto, como el volcado
  *                      del Dolphin parchado (GCPS3_VERTICES)
+ *     --triangulos ARCHIVO cada triángulo que llega al rasterizador (GCPS3_TRIANGULOS)
+ *     --copias ARCHIVO     cada copia del EFB y al final el EFB, con CRC (GCPS3_COPIAS)
  *
  * Lo que el programa imprime (OSReport, printf...) sale por la salida estándar;
  * los mensajes del emulador, por la de error. Sale con el código de exit() del
@@ -45,6 +47,7 @@
 #include "core/version.h"
 #include "core/xfb.h"
 #include "cpu/huella.h"
+#include "gx/raster.h"
 
 #define DEFAULT_CYCLES GC_CPU_CLOCK
 #define MAX_FILE       (32u << 20)
@@ -65,6 +68,8 @@ static void usage(FILE *out, const char *argv0)
             "  --puntos ARCHIVO huella encadenada cada 65536 pasos y al final\n"
             "  --estado-gx ARCHIVO  al terminar, el estado de GX en texto (FIFO, BP, CP, XF)\n"
             "  --vertices ARCHIVO   cada vertice transformado, en texto (como Dolphin)\n"
+            "  --triangulos ARCHIVO cada triangulo que llega al rasterizador (como Dolphin)\n"
+            "  --copias ARCHIVO     cada copia del EFB y el EFB al final, con CRC (como Dolphin)\n"
             "  --version, --help\n",
             argv0, (unsigned)DEFAULT_CYCLES);
 }
@@ -167,8 +172,46 @@ static int write_estado_gx(const char *path)
     return (ferror(f) | fclose(f)) != 0 ? -1 : 0;
 }
 
-/* --vertices */
-static FILE *vertices_file;
+/* --vertices, --triangulos, --copias */
+static FILE *vertices_file, *triangles_file, *copies_file;
+
+static void triangle_line(void *ctx, const struct gx_rvtx *const v[3], uint32_t ntex)
+{
+    char text[GC_GX_TRIANGLE_TEXT];
+    (void)ctx;
+    gc_gx_triangle_text(v, ntex, text);
+    fprintf(triangles_file, "%s\n", text);
+}
+
+static void copy_line(void *ctx, const char *text)
+{
+    (void)ctx;
+    fprintf(copies_file, "%s\n", text);
+}
+
+/* Abre uno de los volcados de texto con su cabecera; -1 si no se pudo */
+static int open_dump(FILE **f, const char *path, const char *header, int version)
+{
+    *f = fopen(path, "w");
+    if (!*f) {
+        fprintf(stderr, "%s: no se pudo crear\n", path);
+        return -1;
+    }
+    setvbuf(*f, NULL, _IOFBF, 1u << 20);
+    fprintf(*f, "# gc-ps3 %s v%d\n", header, version);
+    return 0;
+}
+
+static int close_dump(FILE *f, const char *path)
+{
+    if (!f)
+        return 0;
+    if ((ferror(f) | fclose(f)) != 0) {
+        fprintf(stderr, "runner: no se pudo escribir %s\n", path);
+        return 1;
+    }
+    return 0;
+}
 
 static void vertex_line(void *ctx, const struct gx_vtx_out *v, uint32_t ntex)
 {
@@ -260,7 +303,7 @@ int main(int argc, char **argv)
     uint64_t cycles = DEFAULT_CYCLES;
     const char *dol_path = NULL, *trace_path = NULL, *map_path = NULL, *image_path = NULL;
     const char *huella_path = NULL, *puntos_path = NULL, *detalle = NULL, *estado_path = NULL;
-    const char *vertices_path = NULL;
+    const char *vertices_path = NULL, *triangles_path = NULL, *copies_path = NULL;
     gc_boot_config_t cfg = { 0, 0 };
     int have_rtc = 0, list_frames = 0;
 
@@ -315,12 +358,18 @@ int main(int argc, char **argv)
                 return 2;
             }
             estado_path = argv[i];
-        } else if (strcmp(a, "--vertices") == 0) {
+        } else if (strcmp(a, "--vertices") == 0 || strcmp(a, "--triangulos") == 0 ||
+                   strcmp(a, "--copias") == 0) {
             if (++i >= argc) {
-                fprintf(stderr, "--vertices necesita un archivo\n");
+                fprintf(stderr, "%s necesita un archivo\n", a);
                 return 2;
             }
-            vertices_path = argv[i];
+            if (a[2] == 'v')
+                vertices_path = argv[i];
+            else if (a[2] == 't')
+                triangles_path = argv[i];
+            else
+                copies_path = argv[i];
         } else if (strcmp(a, "--pal") == 0) {
             cfg.pal = 1;
         } else if (strcmp(a, "--rtc") == 0) {
@@ -432,17 +481,18 @@ int main(int argc, char **argv)
         sys.cpu.trace = trace_line;
     }
 
-    if (vertices_path) {
-        vertices_file = fopen(vertices_path, "w");
-        if (!vertices_file) {
-            fprintf(stderr, "%s: no se pudo crear\n", vertices_path);
-            gc_system_free(&sys);
-            return 1;
-        }
-        setvbuf(vertices_file, NULL, _IOFBF, 1u << 20);
-        fprintf(vertices_file, "# gc-ps3 vertices v%d\n", GC_GX_VERTICES_VERSION);
-        sys.gx.vertex_cb = vertex_line;
+    if ((vertices_path && open_dump(&vertices_file, vertices_path, "vertices", GC_GX_VERTICES_VERSION)) ||
+        (triangles_path && open_dump(&triangles_file, triangles_path, "triangulos", GC_GX_TRIANGULOS_VERSION)) ||
+        (copies_path && open_dump(&copies_file, copies_path, "copias", GC_GX_COPIAS_VERSION))) {
+        gc_system_free(&sys);
+        return 1;
     }
+    if (vertices_file)
+        sys.gx.vertex_cb = vertex_line;
+    if (copies_file)
+        sys.gx.copy_cb = copy_line;
+    if (triangles_file)
+        sys.gx.triangle_cb = triangle_line;
 
     const clock_t t0 = clock();
     const uint64_t ran = gc_system_run(&sys, cycles);
@@ -476,14 +526,14 @@ int main(int argc, char **argv)
                 (unsigned long long)sys.vi.fields);
     const int image_failed = report_frame(image_path) != 0;
     const int estado_failed = estado_path && write_estado_gx(estado_path) != 0;
-    int vertices_failed = 0;
-    if (vertices_file) {
+    if (vertices_file)
         fprintf(stderr, "runner: %llu primitivas, %llu vertices transformados\n",
                 (unsigned long long)sys.gx.primitives, (unsigned long long)sys.gx.drawn);
-        vertices_failed = (ferror(vertices_file) | fclose(vertices_file)) != 0;
-        if (vertices_failed)
-            fprintf(stderr, "runner: no se pudo escribir %s\n", vertices_path);
-    }
+    if (copies_file)
+        gc_gx_efb_final(&sys.gx);
+    const int vertices_failed = close_dump(vertices_file, vertices_path) |
+                                close_dump(triangles_file, triangles_path) |
+                                close_dump(copies_file, copies_path);
     const int code = sys.hle.exited ? (int)(sys.hle.exit_code & 0xFFu) : 0;
     if (sys.hle.exited)
         fprintf(stderr, "runner: el programa termino con exit(%d)\n", (int)sys.hle.exit_code);

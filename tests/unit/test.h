@@ -72,6 +72,8 @@ extern const test_case_t gx_tests[];
 extern const test_case_t vtx_tests[];
 extern const test_case_t xform_tests[];
 extern const test_case_t prim_tests[];
+extern const test_case_t efb_tests[];
+extern const test_case_t setup_tests[];
 extern const test_case_t xfb_tests[];
 extern const test_case_t hle_tests[];
 extern const test_case_t program_tests[];

@@ -21,10 +21,10 @@
 /*
  * Registros de BP: VideoCommon/BPStructs.cpp de Dolphin (LoadBPReg y
  * BPWritten). El valor nuevo pasa por la máscara de BP (0xFE), que vuelve a
- * 0xFFFFFF después de cualquier otra escritura. En esta etapa solo hacen algo
- * el token (0x47, 0x48) y "draw done" (0x45 = 2); el resto se guarda, y los
- * registros que disparan algo (copia del EFB, cargas de TLUT y de TMEM...) se
- * avisan una vez en el log hasta la etapa C.
+ * 0xFFFFFF después de cualquier otra escritura. Hacen algo el token (0x47,
+ * 0x48), "draw done" (0x45 = 2) y la copia del EFB (0x52, copy.c); el resto se
+ * guarda, y los otros registros que disparan algo (cargas de TLUT y de TMEM...)
+ * se avisan una vez en el log hasta que se implementen.
  */
 #include "core/log.h"
 #include "core/system.h"
@@ -34,7 +34,7 @@
 static int always_acts(uint8_t reg)
 {
     switch (reg) {
-    case 0x52:                     /* BPMEM_TRIGGER_EFB_COPY */
+    case GX_BP_COPY:               /* BPMEM_TRIGGER_EFB_COPY */
     case 0x55: case 0x56:          /* BPMEM_CLEARBBOX1/2 */
     case 0x57:                     /* BPMEM_CLEAR_PIXEL_PERF */
     case GX_BP_DRAWDONE: case GX_BP_TOKEN: case GX_BP_TOKEN_INT:
@@ -82,6 +82,9 @@ void gc_gx_load_bp(gc_gx_t *gx, uint8_t reg, uint32_t value)
         return;
     case GX_BP_TOKEN_INT:
         gc_pe_set_token(pe, (uint16_t)nv, 1, gx->cycles);
+        return;
+    case GX_BP_COPY:
+        gc_gx_efb_copy(gx);
         return;
     default:
         if (always_acts(reg))

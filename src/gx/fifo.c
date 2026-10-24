@@ -29,6 +29,7 @@
 #include "core/log.h"
 #include "core/system.h"
 #include "gx/gx.h"
+#include "gx/raster.h"
 
 #define LOG_MAX 16
 
@@ -139,13 +140,20 @@ void gc_gx_reset(gc_gx_t *gx)
     gx->unknown = gx->warnings = 0;
     memset(gx->bp_noted, 0, sizeof gx->bp_noted);
     gc_gx_vtx_reset(gx);
+    if (gx->efb)
+        memset(gx->efb, 0, sizeof *gx->efb);
+    if (gx->raster)
+        memset(gx->raster, 0, sizeof *gx->raster);
+    gx->triangles = 0;
 }
 
 int gc_gx_init(gc_gx_t *gx, struct gc_system *sys)
 {
     gx->sys = sys;
     gx->vbuf = malloc(GC_GX_VBUF_SIZE);
-    if (!gx->vbuf || gc_gx_vtx_init(gx) != 0) {
+    gx->efb = malloc(sizeof *gx->efb);
+    gx->raster = calloc(1, sizeof *gx->raster);
+    if (!gx->vbuf || !gx->efb || !gx->raster || gc_gx_vtx_init(gx) != 0) {
         gc_gx_free(gx);
         return -1;
     }
@@ -157,5 +165,9 @@ void gc_gx_free(gc_gx_t *gx)
 {
     free(gx->vbuf);
     gx->vbuf = NULL;
+    free(gx->efb);
+    gx->efb = NULL;
+    free(gx->raster);
+    gx->raster = NULL;
     gc_gx_vtx_free(gx);
 }

@@ -51,6 +51,7 @@
 #include "core/log.h"
 #include "core/system.h"
 #include "gx/gx.h"
+#include "gx/raster.h"
 #include "gx/vtx.h"
 #include "gx/xform.h"
 
@@ -182,6 +183,8 @@ static void run(gc_gx_t *gx, const gx_vtx_plan_t *plan, uint32_t type, const uin
     /* La caché solo cambia con la normal en el formato: sin ella no hace falta
      * decodificar lo que no se usa */
     const uint32_t need = plan->has_nrm ? loaded : use;
+    if (use)
+        gx_setup_begin(gx, type);
     for (uint32_t at = 0; at < n && done < need; at += GX_VTX_BLOCK) {
         const uint32_t chunk = n - at < GX_VTX_BLOCK ? n - at : GX_VTX_BLOCK;
         const uint32_t m = gx_vtx_gather(plan, gx->cp.array_base, gx->cp.array_stride, ram_fn, gx,
@@ -195,6 +198,8 @@ static void run(gc_gx_t *gx, const gx_vtx_plan_t *plan, uint32_t type, const uin
             if (gx->vertex_cb)
                 for (uint32_t k = 0; k < x; k++)
                     gx->vertex_cb(gx->vertex_ctx, &v->out[k], ntex);
+            for (uint32_t k = 0; k < x; k++)
+                gx_setup_vertex(gx, &v->out[k]);
             gx->drawn += x;
         }
         done += m;

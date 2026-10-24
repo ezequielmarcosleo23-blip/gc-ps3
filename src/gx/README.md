@@ -2,7 +2,7 @@
 
 El lado de la GPU de la GameCube, portable: lee el FIFO de GX de la RAM, decodifica los comandos, guarda el estado de BP, CP y XF y carga y transforma los vértices de cada primitiva. Lo que la CPU ve de GX (gather pipe, registros del CP y del PE) está en [src/hw](../hw/README.md). Sigue a Dolphin (commit `cf5cb7ef`) con un solo hilo; lo portado lleva la atribución en el encabezado.
 
-Fase 2 ([docs/fase2.md](../../docs/fase2.md)): etapas A (FIFO y estado) y B (vértices y XF). Las primitivas todavía no se dibujan: el viewport, el recorte y el rasterizador de referencia llegan en la etapa C, y el backend del RSX (`include/backend/gfx_backend.h`) en la D.
+Fase 2 ([docs/fase2.md](../../docs/fase2.md)): etapas A (FIFO y estado), B (vértices y XF) y, en curso, C (el renderizador por software de Dolphin: por ahora el EFB, las copias sin la conversión a la RAM, el armado y el recorte). El backend del RSX (`include/backend/gfx_backend.h`) llega en la D.
 
 | Archivo | Qué hace | En Dolphin |
 | --- | --- | --- |
@@ -15,6 +15,10 @@ Fase 2 ([docs/fase2.md](../../docs/fase2.md)): etapas A (FIFO y estado) y B (vé
 | `prim.c` | Una primitiva: partes de 16 380, vértices descartados, los que usa, la caché de normales, la foto del XF, bloques de 64; el volcado en texto | `VertexLoaderManager.cpp`, `VertexManagerBase.cpp`, `IndexGenerator.cpp`, `SWVertexLoader.cpp` |
 | `vtx.h`, `vtx.c` | Cargador de vértices: juntar (PPU) y decodificar (listo para SPU) | `VertexLoaderX64.cpp`, `SWVertexLoader.cpp` |
 | `xform.h`, `xform.c` | El XF: posición, proyección, normales, color y alfa con 8 luces, coordenadas de textura (listo para SPU) | `VideoBackends/Software/TransformUnit.cpp` |
+| `raster.h`, `setup.c` | Armado de triángulos, líneas y puntos; recorte, culling, división por w y viewport | `IndexGenerator.cpp`, `VideoBackends/Software/SetupUnit.cpp`, `Clipper.cpp` |
+| `raster.c` | El rasterizador (etapa C3); por ahora, el volcado de triángulos | `VideoBackends/Software/Rasterizer.cpp` |
+| `efb.h`, `efb.c` | El EFB: 640 × 528 de color y Z en los formatos de píxel | `VideoBackends/Software/SWEfbInterface.cpp` |
+| `copy.c` | BP 0x52: rectángulo, tamaño en la RAM, borrado; el volcado de copias | `BPStructs.cpp`, `TextureCacheBase.cpp`, `BPFunctions.cpp`, `EfbCopy.cpp` |
 | `estado.c` | El estado en texto para compararlo con Dolphin | El parche de `tools/dolphin-trace` |
 
 ## Tiempo (D-042)
@@ -77,4 +81,4 @@ Listo para SPU quiere decir búfer a búfer, sin estado global ni punteros a la 
 
 ## Pruebas
 
-`tests/unit/test_gx.c` (19 pruebas), `test_vtx.c` (10), `test_xform.c` (12) y `test_prim.c` (6), y los DOLs `gx_fifo` y `gx_tri` ([tests/dol](../../tests/dol/README.md)), iguales a Dolphin instrucción por instrucción, con el mismo estado de GX al final y, en `gx_tri`, los mismos 374 vértices bit a bit ([docs/traza-dolphin.md](../../docs/traza-dolphin.md)).
+`tests/unit/test_gx.c` (19 pruebas), `test_vtx.c` (10), `test_xform.c` (12), `test_prim.c` (6), `test_efb.c` (5) y `test_setup.c` (5), y los DOLs `gx_fifo`, `gx_tri` y `gx_raster` ([tests/dol](../../tests/dol/README.md)), iguales a Dolphin instrucción por instrucción, con el mismo estado de GX y EFB al final y los mismos vértices y triángulos bit a bit ([docs/traza-dolphin.md](../../docs/traza-dolphin.md)).

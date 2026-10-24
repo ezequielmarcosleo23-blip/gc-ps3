@@ -15,6 +15,7 @@ Los DOLs de prueba corren en el intérprete de gc-ps3 y en Dolphin (cf5cb7ef, co
 | `tests/dol/dolphin/*.txt` | Las referencias: la huella encadenada de Dolphin cada 65 536 instrucciones y al final |
 | `tests/dol/dolphin/*.gx.txt` | El estado de GX de Dolphin al final de la traza (ver abajo) |
 | `tests/dol/dolphin/*.vtx.txt` | Cada vértice que transformó Dolphin, en los DOLs que dibujan (ver abajo) |
+| `tests/dol/dolphin/*.tri.txt`, `*.cop.txt` | Cada triángulo que llegó al rasterizador y cada copia del EFB (ver abajo) |
 | `tests/unit/test_dolphin.c` | `make test` y el CI corren los DOLs y comparan con las referencias, sin Dolphin |
 
 ## Por qué paso a paso
@@ -79,13 +80,22 @@ Cada float va con sus 8 dígitos hexadecimales, y un NaN siempre como `7fc00000`
 
 `comparar.py` compara los dos archivos (si difieren, dice desde qué vértice y qué campos) y con `--referencia` guarda el de Dolphin en `tests/dol/dolphin/<prueba>.vtx.txt` si el DOL dibujó algo; `test_dolphin.c` lo revisa vértice por vértice cuando corre el DOL completo. Dolphin anota al vaciar el lote: un DOL tiene que terminar con algo que lo vacíe (un token, por ejemplo) para que estén todos.
 
+## Triángulos y copias (Fase 2, etapa C)
+
+| Variable del parche | Opción del runner | Qué anota |
+| --- | --- | --- |
+| `GCPS3_TRIANGULOS` | `--triangulos` | Cada triángulo que llega al rasterizador (`Rasterizer::DrawTriangleFrontFace`), ya recortado: `t<n>` y por vértice `v`, x, y, z de la pantalla, w, los 2 colores y las n coordenadas (n es BP genMode numtexgens). Las líneas y los puntos llegan como dos triángulos cada uno |
+| `GCPS3_COPIAS` | `--copias` | Cada copia del EFB (BP 0x52): `c` formato de píxel, BP 0x52, rectángulo pedido, destino y paso, el CRC-32 del EFB en el rectángulo (los 3 bytes de color de cada píxel y aparte los de Z, después de copiar y antes de borrar) y el de los bytes que quedaron en la RAM; `fuera` si el rectángulo empieza fuera del EFB. Al final de la traza, `efb` con el CRC del EFB entero |
+
+`comparar.py` guarda la referencia de triángulos si el DOL dibujó alguno, y la de copias si copió o dejó algo en el EFB (`efb c5b034a6 c5b034a6` es el EFB en cero). Mientras el runner no rasteriza, `--sin-copias` saltea esa comparación. Con el video por software, Dolphin siempre escribe las copias en la RAM en el momento (no tiene copias a la VRAM), así que `EFBToTextureEnable` y `DeferEFBCopies` no cambian nada.
+
 ## Configuración de Dolphin
 
 `comparar.py` arranca Dolphin igual que el runner arranca la GameCube (D-032, D-036): intérprete, sin hilo de CPU aparte, IPL salteado, DSP HLE, región NTSC-U e inglés (sin esto Dolphin toma el país del sistema, y sin país usa PAL), sin tarjetas de memoria, mando estándar en el puerto 1 siempre conectado (`GCPadNew.ini` con `Always Connected`; sin dispositivos de entrada figuraría desenchufado) y los otros vacíos, reloj fijo (`EnableCustomRTC`, el mismo `--rtc` que el runner), video por software sin ventana (la referencia de las imágenes y de los vértices, D-041 y D-043), sin audio y sin límite de velocidad. El `.map` del DOL va a `Maps/<prueba>.map` del usuario de Dolphin, así Dolphin engancha los mismos `OSReport` (ganchos al inicio: no cambian el estado).
 
-## Resultado (2026-10-23; `gx_fifo` y `gx_tri` el 2026-10-24)
+## Resultado (2026-10-23; `gx_fifo`, `gx_tri` y `gx_raster` el 2026-10-24)
 
-Los 8 DOLs dan el mismo estado que Dolphin antes de cada instrucción, el mismo estado de GX al final y, los que dibujan, los mismos vértices:
+Los 9 DOLs dan el mismo estado que Dolphin antes de cada instrucción, el mismo estado de GX y el mismo EFB al final y, los que dibujan, los mismos vértices y triángulos:
 
 | DOL | Instrucciones comparadas | Qué cubre |
 | --- | --- | --- |
@@ -96,7 +106,8 @@ Los 8 DOLs dan el mismo estado que Dolphin antes de cada instrucción, el mismo 
 | `pantalla` | 30 000 000 | VI en 480i y el XFB |
 | `contador` | 30 000 000 | 3 interrupciones de video |
 | `gx_fifo` | 124 441 (completo), el estado de GX y 47 vértices | FIFO de GX, CP, PE (Fase 2, etapa A) |
-| `gx_tri` | 136 905 (completo), el estado de GX y 374 vértices | Vértices, luces y coordenadas de textura (Fase 2, etapa B) |
+| `gx_tri` | 136 905 (completo), el estado de GX, 374 vértices y 254 triángulos | Vértices, luces y coordenadas de textura (Fase 2, etapa B) |
+| `gx_raster` | 116 515 (completo), el estado de GX, 231 vértices y 160 triángulos | Recorte, culling, líneas y puntos (Fase 2, etapa C) |
 
 Lo que hubo que cambiar para llegar ahí:
 
@@ -117,7 +128,7 @@ Los dos errores del intérprete de Dolphin valen también para Dolphin sin parch
 
 ```bash
 make dolphin                 # una vez por sesión (~1 h con 2 núcleos)
-make dolphin-ref             # compara los 8 DOLs y regenera tests/dol/dolphin
+make dolphin-ref             # compara los 9 DOLs y regenera tests/dol/dolphin
 python3 tools/dolphin-trace/comparar.py tests/dol/bin/hw.dol          # uno solo
 python3 tools/trace_diff.py build/dolphin/trazas/hw.runner.huella build/dolphin/trazas/hw.dolphin.huella
 ```

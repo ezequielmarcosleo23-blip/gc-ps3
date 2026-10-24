@@ -42,6 +42,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "gx/efb.h"
+
 #define GC_GX_SLOT       1000             /* GPU_TIME_SLOT_SIZE */
 #define GC_GX_VBUF_SIZE  (2u << 20)       /* FIFO_SIZE de Dolphin: lo más largo que espera un comando */
 
@@ -59,7 +61,8 @@ enum {
 
 /* Registros de BP con efectos en esta etapa */
 enum {
-    GX_BP_DRAWDONE = 0x45, GX_BP_TOKEN = 0x47, GX_BP_TOKEN_INT = 0x48, GX_BP_MASK = 0xFE,
+    GX_BP_DRAWDONE = 0x45, GX_BP_TOKEN = 0x47, GX_BP_TOKEN_INT = 0x48, GX_BP_COPY = 0x52,
+    GX_BP_MASK = 0xFE,
 };
 
 /* Comandos del FIFO */
@@ -81,6 +84,8 @@ typedef struct gc_gx_cp_state {
 
 struct gc_system;
 struct gx_vtx_out;
+struct gx_rvtx;
+struct gx_raster;
 
 typedef struct gc_gx {
     struct gc_system *sys;
@@ -120,6 +125,20 @@ typedef struct gc_gx {
      * Dolphin, GCPS3_VERTICES); ntex es XF numTexGens tal cual (4 bits) */
     void    (*vertex_cb)(void *ctx, const struct gx_vtx_out *v, uint32_t ntex);
     void     *vertex_ctx;
+
+    /* Armado, recorte y rasterizador (etapa C, setup.c y raster.c) */
+    struct gx_raster *raster;
+    uint64_t  triangles;              /* triángulos que llegaron al rasterizador */
+    /* Cada triángulo que llega al rasterizador (el volcado de Dolphin,
+     * GCPS3_TRIANGULOS); ntex es BP genMode numtexgens */
+    void    (*triangle_cb)(void *ctx, const struct gx_rvtx *const v[3], uint32_t ntex);
+    void     *triangle_ctx;
+
+    /* EFB y copias (etapa C, efb.c y copy.c) */
+    gx_efb_t *efb;
+    /* Cada copia del EFB en texto (el volcado de Dolphin, GCPS3_COPIAS) */
+    void    (*copy_cb)(void *ctx, const char *line);
+    void     *copy_ctx;
 } gc_gx_t;
 
 /* Reserva el búfer de video. 0, o -1 sin memoria. */
@@ -179,6 +198,17 @@ void gc_gx_vtx_reset(gc_gx_t *gx);
  * de la posición en la vista, la proyectada, las 3 normales, los 2 colores y
  * las coordenadas; un NaN siempre como 7fc00000. */
 void gc_gx_vertex_text(const struct gx_vtx_out *v, uint32_t ntex, char buf[GC_GX_VERTEX_TEXT]);
+
+/* ---- EFB y copias (efb.c, copy.c) ---- */
+
+#define GC_GX_COPIAS_VERSION 1
+
+/* BP 0x52: copia el EFB a la RAM y lo borra si se pide */
+void gc_gx_efb_copy(gc_gx_t *gx);
+/* La última línea del volcado de copias: el CRC del EFB entero */
+void gc_gx_efb_final(gc_gx_t *gx);
+/* Las máscaras de escritura del EFB según BP 0x40, 0x41 y 0x43 */
+gx_efb_write_t gc_gx_efb_write_mask(const gc_gx_t *gx);
 
 /* ---- estado completo para comparar con Dolphin (estado.c) ---- */
 

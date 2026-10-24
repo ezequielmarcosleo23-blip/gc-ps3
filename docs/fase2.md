@@ -19,7 +19,7 @@ Todo lo anterior a la lista de dibujo es portable y se prueba en el CI; el RSX, 
 | --- | --- | --- | --- |
 | A. FIFO y Command Processor | FIFO de GX en la RAM (write-gather pipe, punteros del PI y del CP, vuelta, marcas alta y baja), lector de comandos (registros de CP/XF/BP, cargas indexadas, display lists, invalidación de la caché de vértices, primitivas que por ahora solo se saltan), estado de BP/CP/XF, Pixel Engine (tokens, "draw done", interrupciones) | Unitarias, DOL `gx_fifo` con una mini-librería GX propia, traza de Dolphin | Completa (2026-10-24), ver abajo |
 | B. Vértices y XF | Formatos de vértice (VAT/VCD, directo e índices de 8 y 16 bits), tipos de componente y de color, matrices indexadas, proyección, normales, coordenadas de textura, 8 luces | Unitarias con valores calculados; DOL `gx_tri` contra los vértices del video por software de Dolphin | Completa (2026-10-24), ver abajo |
-| C. Rasterizador de referencia (PC) | Viewport, primitivas, recorte, culling, Z en los formatos del EFB, scissor, TEV en enteros como el hardware, alpha test, mezcla, todos los formatos de textura con paleta y filtros, copias del EFB a la RAM (XFB y texturas) | DOLs `gx_tex`, `gx_tev`, `gx_light`, `gx_copy`; el XFB en la RAM contra el renderizador por software de Dolphin | Pendiente |
+| C. Rasterizador de referencia | Viewport, primitivas, recorte, culling, Z en los formatos del EFB, scissor, TEV en enteros como el hardware, alpha test, mezcla, todos los formatos de textura con paleta y filtros, copias del EFB a la RAM (XFB y texturas). Corre también en la PS3 hasta que dibuje el RSX (cambia el punto 1 de D-041) | DOLs `gx_raster`, `gx_tex`, `gx_tev`, `gx_copy`, `gx_escena`; cada triángulo, el EFB y cada copia contra el renderizador por software de Dolphin | En curso: C1 y C2 completos, ver abajo |
 | D. Backend RSX | EFB como destino de rsxkit, vértices al RSX, TEV a fragment programs, texturas decodificadas (CMPR a DXT1), copias del EFB al XFB pasando por la RAM, en la app | RPCS3: la app anota la comparación de cada cuadro con el runner y `compare_log` la revisa | Pendiente |
 | E. Cierre | Criterio de salida, documentos y decisiones | CI y RPCS3 | Pendiente |
 
@@ -47,6 +47,22 @@ El viewport pasó a la etapa C: va después del recorte, y en el video por softw
 | B6. Verificación | 28 pruebas unitarias nuevas y 2 de DOL (158 en total), OK en x86-64 con ASan/UBSan y en PowerPC 64; `make test-app` corre también `gx_tri`. 24 de 25 mutaciones detectadas (la que no: el orden de una multiplicación del alfa, que el redondeo a 8 bits tapa). Compilado con FMA (`-ffp-contract=fast -O2` en PowerPC) los vértices de `gx_tri` dejan de ser los de Dolphin. Decisión D-043 |
 
 Dolphin transforma al vaciar el lote, con el estado de ese momento; gc-ps3, al leer la primitiva, como el hardware. Da lo mismo porque todo lo que cambia el XF vacía el lote antes, salvo escribir XF 0x1018 o 0x1019 con el mismo valor que ya tiene el registro de CP (MATINDEX); libogc escribe primero el de CP, que sí lo vacía.
+
+## Etapa C: plan y avance
+
+Plan aprobado el 2026-10-24: se porta el renderizador por software de Dolphin y se compara cada paso; un commit cada uno o dos pasos.
+
+| Paso | Contenido | Estado |
+| --- | --- | --- |
+| C1. Referencia | El parche anota cada copia del EFB (`GCPS3_COPIAS`: parámetros, CRC del EFB y de lo escrito en la RAM; al final, el EFB entero) y cada triángulo que llega al rasterizador (`GCPS3_TRIANGULOS`). El runner da lo mismo con `--copias` y `--triangulos`; `comparar.py` y `test_dolphin` los comparan. EFB de 640 × 528 con los formatos de píxel y el borrado al copiar ([src/gx/efb.c](../src/gx/efb.c), [copy.c](../src/gx/copy.c)) | Completo (2026-10-24) |
+| C2. Ensamblado y recorte | El orden de IndexGenerator, recorte contra los 6 planos con la interpolación de Dolphin, culling, división por w y viewport, líneas y puntos como triángulos con su ancho y el desplazamiento de las coordenadas ([src/gx/setup.c](../src/gx/setup.c)). DOL `gx_raster`: los 160 triángulos iguales a Dolphin, bit a bit | Completo (2026-10-24) |
+| C3. Rasterizador y EFB | Bordes, scissor, interpolación, Z, zfreeze, mezcla, lógicas, dither, lectura del EFB desde la CPU, bounding box | |
+| C4. Texturas | Los 11 formatos, TLUT, TMEM, filtros, mipmaps; decodificadores listos para SPU | |
+| C5. TEV | 16 etapas, alpha test, niebla, textura de Z, indirectas | |
+| C6. Copias del EFB | A textura y al XFB; la imagen en pantalla | |
+| C7. Verificación | Mutaciones, tiempo por cuadro, docs, D-044 | |
+
+Con un lote de Dolphin, lo que no lo vacía se aplica a todo el lote al dibujarlo: además de XF 0x1018/0x1019 (etapa B), XF 0x1005 (sin detección de recorte). Los DOLs vacían el lote antes de volver a cambiarlo.
 
 ## Criterio de salida
 
