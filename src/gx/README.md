@@ -17,7 +17,8 @@ Fase 2 ([docs/fase2.md](../../docs/fase2.md)): etapas A (FIFO y estado), B (vér
 | `xform.h`, `xform.c` | El XF: posición, proyección, normales, color y alfa con 8 luces, coordenadas de textura (listo para SPU) | `VideoBackends/Software/TransformUnit.cpp` |
 | `raster.h`, `setup.c` | Armado de triángulos, líneas y puntos; recorte, culling, división por w y viewport | `IndexGenerator.cpp`, `VideoBackends/Software/SetupUnit.cpp`, `Clipper.cpp` |
 | `raster.c` | El rasterizador: rectángulos de tijera, aristas en 28.4, bloques de 2 × 2, pendientes, LOD, zfreeze, Z temprana; el volcado de triángulos | `VideoBackends/Software/Rasterizer.cpp`, `BPFunctions.cpp` |
-| `tev.h`, `tev.c` | El TEV: etapas indirectas, combinadores, constantes, swap, prueba de alfa, textura de Z, niebla, Z tardía (las texturas dan negro hasta C4) | `VideoBackends/Software/Tev.cpp` |
+| `tev.h`, `tev.c` | El TEV: etapas indirectas, combinadores, constantes, swap, prueba de alfa, textura de Z, niebla, Z tardía | `VideoBackends/Software/Tev.cpp` |
+| `exp2.h`, `exp2.c` | El 2^x de la niebla en double-double: el mismo float que `pow` de glibc, igual en la PC y en el PPU | |
 | `efb.h`, `efb.c` | El EFB: 640 × 528 de color y Z en los formatos de píxel; prueba de Z, mezcla, resta, lógicas, alfa de destino, dither | `VideoBackends/Software/SWEfbInterface.cpp` |
 | `bbox.c` | La caja envolvente con la caché de VideoCommon | `VideoCommon/BoundingBox.cpp`, `SWBoundingBox.cpp` |
 | `texdec.h`, `texdec.c` | Decodificadores de texturas, listos para SPU: los 11 formatos con las 3 paletas, por texel y la textura entera de a bloques | `VideoCommon/TextureDecoder_Common.cpp` |
@@ -86,7 +87,7 @@ Listo para SPU quiere decir búfer a búfer, sin estado global ni punteros a la 
 
 ## Pruebas
 
-`tests/unit/test_gx.c` (19 pruebas), `test_vtx.c` (10), `test_xform.c` (12), `test_prim.c` (6), `test_efb.c` (5), `test_setup.c` (5), `test_raster.c` (7) y `test_tex.c` (6), y los DOLs `gx_fifo`, `gx_tri`, `gx_raster` y `gx_tex` ([tests/dol](../../tests/dol/README.md)), iguales a Dolphin instrucción por instrucción, con el mismo estado de GX y EFB al final y los mismos vértices, triángulos y copias bit a bit ([docs/traza-dolphin.md](../../docs/traza-dolphin.md)).
+`tests/unit/test_gx.c` (19 pruebas), `test_vtx.c` (10), `test_xform.c` (12), `test_prim.c` (6), `test_efb.c` (5), `test_setup.c` (5), `test_raster.c` (8) y `test_tex.c` (6), y los DOLs `gx_fifo`, `gx_tri`, `gx_raster`, `gx_tex` y `gx_tev` ([tests/dol](../../tests/dol/README.md)), iguales a Dolphin instrucción por instrucción, con el mismo estado de GX y EFB al final y los mismos vértices, triángulos y copias bit a bit ([docs/traza-dolphin.md](../../docs/traza-dolphin.md)).
 
 ## Del triángulo al píxel (etapa C3)
 
@@ -112,5 +113,16 @@ Sin caché, como Dolphin por software: cada texel se lee de la RAM (desde la dir
 | Envoltura | Recortar, repetir con AND (también sin potencia de 2), espejo; la 3 como recortar |
 | Filtro | Más cercano en s >> 7; bilineal medio texel corrido con pesos de 7 bits |
 | Mipmaps | Del LOD en s28.4 del rasterizador: más cercano redondea desde ,5; lineal mezcla en dieciseisavos. El comienzo de cada nivel se cuenta con el tamaño sin redondear al bloque (mínimo un bloque); en RGBA8 precargado solo avanza el banco par |
+
+## TEV (etapa C5)
+
+| Paso | Cómo es |
+| --- | --- |
+| Entradas | a, b y c de 8 bits sin signo, d de 11 con signo; las constantes y los registros de BP 0xE0-0xE7 en 11 bits con signo; K de 0 a 31 con 8-11 en 0 |
+| Combinadores | Lerp con c + c >> 7, redondeo según la resta, sesgo, escala; en alfa la resta redondea distinto (`-temp >> 8`); comparaciones R8, GR16, BGR24 y RGB8/A8 (las de alfa en R8, GR16 y BGR24 miran las entradas de color); recorte a 0-255 o a -1024..1023 y 16 bits al guardar |
+| Indirectas | El texel de la etapa indirecta (A, B, G), formato con su corrimiento, sesgo, alfa de bump, matriz fija o dinámica (S, T) con la escala de 5 bits (el bit 23 de la tercera fila no cuenta), envolturas y suma con la etapa anterior, en 24 bits con signo |
+| Después | Prueba de alfa (dos comparaciones y una lógica), textura de Z con el texel sin swap, niebla (perspectiva u ortográfica, rango, el caso NaN, 2^x de `exp2.c`), Z tardía |
+
+`tools/exp2/comprobar.c` compara `gx_exp2` con `pow(2, x)` de la libm para todos los floats de [-8, 0] (unos 75 s con 2 hilos); `tools/exp2/gen_tabla.py` genera sus constantes.
 
 Las conversiones de float a entero siguen a x86-64 (`x86.h`) y la aritmética entera que en Dolphin puede desbordar se hace con la vuelta de 32 bits. Lo que en Dolphin escribe fuera de sus arreglos (más de 2 canales, 8 coordenadas o 4 etapas indirectas en genMode) se recorta a esos máximos.

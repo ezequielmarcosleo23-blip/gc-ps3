@@ -214,6 +214,7 @@ static void test_gx_fifo(void)  { CHECK(run_program("gx_fifo", MAX_CYCLES, EXITS
 static void test_gx_tri(void)   { CHECK(run_program("gx_tri", MAX_CYCLES, EXITS)); }
 static void test_gx_raster(void) { CHECK(run_program("gx_raster", MAX_CYCLES, EXITS)); }
 static void test_gx_tex(void) { CHECK(run_program("gx_tex", MAX_CYCLES, EXITS)); }
+static void test_gx_tev(void) { CHECK(run_program("gx_tev", MAX_CYCLES, EXITS)); }
 
 const test_case_t program_tests[] = {
     { "dol hola: OSReport, printf con pila y va_list, puts (= salida en la PC)", test_hola },
@@ -226,5 +227,6 @@ const test_case_t program_tests[] = {
     { "dol gx_tri: vértices de cada formato, luces y coordenadas de textura", test_gx_tri },
     { "dol gx_raster: recorte, culling, líneas, puntos y píxeles", test_gx_raster },
     { "dol gx_tex: formatos, paletas, envolturas, filtros, mipmaps y TMEM", test_gx_tex },
+    { "dol gx_tev: combinadores al azar, indirectas, textura de Z, niebla y prueba de alfa", test_gx_tev },
     { NULL, NULL },
 };

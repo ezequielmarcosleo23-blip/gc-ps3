@@ -23,10 +23,12 @@
  * el CPU. Casos chicos con el valor calculado a mano; lo general lo compara
  * el DOL gx_raster contra Dolphin.
  */
+#include <math.h>
 #include <string.h>
 
 #include "core/log.h"
 #include "core/system.h"
+#include "gx/exp2.h"
 #include "gx/raster.h"
 #include "test.h"
 
@@ -270,6 +272,28 @@ static void test_raster_peek(void)
     teardown();
 }
 
+static uint64_t dbits(double d)
+{
+    uint64_t u;
+    memcpy(&u, &d, sizeof u);
+    return u;
+}
+
+/* El 2^x de la niebla: exacto en los enteros, redondeado al más cercano en el
+ * resto (en -0x1.480e76p-21 glibc da un double menos; el float es el mismo) */
+static void test_raster_exp2(void)
+{
+    CHECK_EQ_U64(dbits(gx_exp2(-0.0f)), dbits(1.0));
+    CHECK_EQ_U64(dbits(gx_exp2(-1.0f)), dbits(0.5));
+    CHECK_EQ_U64(dbits(gx_exp2(-8.0f)), dbits(0x1p-8));
+    CHECK_EQ_U64(dbits(gx_exp2(-0.5f)), dbits(0x1.6a09e667f3bcdp-1));
+    CHECK_EQ_U64(dbits(gx_exp2(-0x1p-149f)), dbits(1.0));
+    CHECK_EQ_U64(dbits(gx_exp2(-0x1.480e76p-21f)), dbits(0x1.fffff1c9bce6bp-1));
+    CHECK_EQ_U64(dbits(gx_exp2(-7.99999952f)), dbits(0x1.0000058b90cf2p-8));
+    const double n = gx_exp2(NAN);
+    CHECK(n != n);
+}
+
 const test_case_t raster_tests[] = {
     { "raster: convención de relleno sin píxeles dobles", test_raster_fill },
     { "raster: rectángulos de tijera con la vuelta por 1024", test_raster_scissor },
@@ -278,5 +302,6 @@ const test_case_t raster_tests[] = {
     { "raster: TEV con registros, constantes y sin recorte", test_raster_tev },
     { "raster: caja envolvente con la caché de Dolphin", test_raster_bbox },
     { "raster: el CPU lee el EFB", test_raster_peek },
+    { "raster: 2^x de la niebla", test_raster_exp2 },
     { NULL, NULL },
 };

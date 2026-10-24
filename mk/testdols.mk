@@ -15,12 +15,12 @@ DOL_CFLAGS := -std=c11 -mcpu=750 -mhard-float -O2 -ffreestanding -fno-builtin -f
               -fno-tree-loop-distribute-patterns -ffp-contract=off -Wall -Wextra -Werror \
               -Wa,-m750cl -Itests/dol
 DOL_LDFLAGS := -nostdlib -static -T tests/dol/link.ld -Wl,--build-id=none
-TESTDOLS    := hola cpu timer pantalla contador hw gx_fifo gx_tri gx_raster gx_tex
+TESTDOLS    := hola cpu timer pantalla contador hw gx_fifo gx_tri gx_raster gx_tex gx_tev
 TESTDOLS_HOSTED := hola cpu pantalla       # los que también compilan en la PC
 DOL_VIDEO   := pantalla contador           # los que usan tests/dol/video.c
-DOL_GXLIB   := gx_fifo gx_tri gx_raster gx_tex   # los que usan tests/dol/gxlib.c (Fase 2)
-DOL_GXVTX   := gx_tri gx_raster gx_tex     # y tests/dol/gxvtx.c (vértices, etapas B y C)
-TESTDOLS_EXIT := hola cpu timer hw gx_fifo gx_tri gx_raster gx_tex  # terminan con exit(0)
+DOL_GXLIB   := gx_fifo gx_tri gx_raster gx_tex gx_tev   # los que usan tests/dol/gxlib.c (Fase 2)
+DOL_GXVTX   := gx_tri gx_raster gx_tex gx_tev     # y tests/dol/gxvtx.c (vértices, etapas B y C)
+TESTDOLS_EXIT := hola cpu timer hw gx_fifo gx_tri gx_raster gx_tex gx_tev  # terminan con exit(0)
 TESTDOLS_STAY := pantalla contador         # se quedan mostrando algo
 
 DOL_OUT  := tests/dol/bin

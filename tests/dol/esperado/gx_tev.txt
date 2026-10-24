@@ -1,0 +1,13 @@
+gx_tev: TEV
+gx_tev: estado inicial
+gx_tev: 1. combinadores al azar
+gx_tev: 2. al azar con texturas
+gx_tev: 3. al azar con indirectas
+gx_tev: 4. al azar con alfa, Z, textura de Z y niebla
+gx_tev: 5. indirectas
+gx_tev: 6. textura de Z
+gx_tev: 7. niebla
+gx_tev: 8. prueba de alfa
+gx_tev: 9. comparaciones y recorte
+gx_tev: suma de las lecturas 381d879b
+gx_tev: 448 tokens, 42304 bytes de texturas; OK

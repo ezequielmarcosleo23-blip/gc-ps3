@@ -24,7 +24,9 @@
  * Los registros de entrada son campos de bits en Dolphin (a, b y c de 8 bits
  * sin signo, d de 11 con signo, las coordenadas de 24 con signo): al guardar
  * se recortan igual. La niebla usa pow y sqrt de double, como el binario de
- * Dolphin (Tev.cpp llama a ::pow y ::sqrt, no a las versiones float).
+ * Dolphin (Tev.cpp llama a ::pow y ::sqrt, no a las versiones float). sqrt da
+ * lo mismo en cualquier libm (IEEE lo pide redondeado al más cercano); pow no,
+ * y en su lugar está gx_exp2 (exp2.h), que da el mismo float que glibc.
  *
  * Lo que en Dolphin es un PanicAlert (canal de color 2-4, modo de matriz
  * indirecta 3, envoltura 7, formato de Z 3) acá sigue el mismo camino sin el
@@ -35,6 +37,7 @@
 #include <string.h>
 
 #include "core/log.h"
+#include "gx/exp2.h"
 #include "gx/gx.h"
 #include "gx/raster.h"
 #include "gx/tev.h"
@@ -471,18 +474,18 @@ static void fog(const gc_gx_t *gx, const gx_tev_t *t, uint8_t out[4])
     float f = clampf(ze, 0.f, 1.f);
     switch (fsel) {
     case 4:                                     /* Exp */
-        f = (float)(1.0 - pow(2.0, (double)(-8.0f * f)));
+        f = (float)(1.0 - gx_exp2(-8.0f * f));
         break;
     case 5:                                     /* ExpSq */
-        f = (float)(1.0 - pow(2.0, (double)(-8.0f * f * f)));
+        f = (float)(1.0 - gx_exp2(-8.0f * f * f));
         break;
     case 6:                                     /* BackwardsExp */
         f = 1.0f - f;
-        f = (float)pow(2.0, (double)(-8.0f * f));
+        f = (float)gx_exp2(-8.0f * f);
         break;
     case 7:                                     /* BackwardsExpSq */
         f = 1.0f - f;
-        f = (float)pow(2.0, (double)(-8.0f * f * f));
+        f = (float)gx_exp2(-8.0f * f * f);
         break;
     default:                                    /* lineal (y 1 y 3) */
         break;
