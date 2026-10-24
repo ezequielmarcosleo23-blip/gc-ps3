@@ -29,6 +29,7 @@
 #include "core/log.h"
 #include "core/system.h"
 #include "gx/gx.h"
+#include "gx/raster.h"
 
 #define LOG_MAX 16
 
@@ -66,10 +67,14 @@ void gc_gx_load_xf(gc_gx_t *gx, uint16_t base, uint32_t count, const uint8_t *da
         for (uint32_t i = 0; i < n; i++, data += 4)
             gx->xf[mem_base + i] = be32(data);
     }
-    /* Registros */
+    /* Registros; el viewport (0x101A-0x101F) cambia la tijera aunque se
+     * escriba el mismo valor */
     if (addr >= GC_XF_REGS_START)
-        for (; addr < end; addr++, data += 4)
+        for (; addr < end; addr++, data += 4) {
+            if (addr >= 0x101Au && addr <= 0x101Fu)
+                gx->raster->scissor_dirty = 1;
             gx->xf[addr] = be32(data);
+        }
 }
 
 void gc_gx_load_xf_indexed(gc_gx_t *gx, uint32_t array, uint32_t index, uint16_t address,

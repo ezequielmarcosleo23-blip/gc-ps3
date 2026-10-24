@@ -143,8 +143,13 @@ void gc_gx_reset(gc_gx_t *gx)
     if (gx->efb)
         memset(gx->efb, 0, sizeof *gx->efb);
     if (gx->raster)
-        memset(gx->raster, 0, sizeof *gx->raster);
+        gx_raster_reset(gx->raster);
     gx->triangles = 0;
+    memset(gx->tev_color, 0, sizeof gx->tev_color);
+    memset(gx->tev_kcolor, 0, sizeof gx->tev_kcolor);
+    gx->tex_noted = 0;
+    memset(&gx->bbox, 0, sizeof gx->bbox);
+    gx->bbox.valid = 1;
 }
 
 int gc_gx_init(gc_gx_t *gx, struct gc_system *sys)

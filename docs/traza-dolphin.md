@@ -87,15 +87,15 @@ Cada float va con sus 8 dígitos hexadecimales, y un NaN siempre como `7fc00000`
 | `GCPS3_TRIANGULOS` | `--triangulos` | Cada triángulo que llega al rasterizador (`Rasterizer::DrawTriangleFrontFace`), ya recortado: `t<n>` y por vértice `v`, x, y, z de la pantalla, w, los 2 colores y las n coordenadas (n es BP genMode numtexgens). Las líneas y los puntos llegan como dos triángulos cada uno |
 | `GCPS3_COPIAS` | `--copias` | Cada copia del EFB (BP 0x52): `c` formato de píxel, BP 0x52, rectángulo pedido, destino y paso, el CRC-32 del EFB en el rectángulo (los 3 bytes de color de cada píxel y aparte los de Z, después de copiar y antes de borrar) y el de los bytes que quedaron en la RAM; `fuera` si el rectángulo empieza fuera del EFB. Al final de la traza, `efb` con el CRC del EFB entero |
 
-`comparar.py` guarda la referencia de triángulos si el DOL dibujó alguno, y la de copias si copió o dejó algo en el EFB (`efb c5b034a6 c5b034a6` es el EFB en cero). Mientras el runner no rasteriza, `--sin-copias` saltea esa comparación. Con el video por software, Dolphin siempre escribe las copias en la RAM en el momento (no tiene copias a la VRAM), así que `EFBToTextureEnable` y `DeferEFBCopies` no cambian nada.
+`comparar.py` guarda la referencia de triángulos si el DOL dibujó alguno, y la de copias si copió o dejó algo en el EFB (`efb c5b034a6 c5b034a6` es el EFB en cero). Una copia sin destino (paso 0) no escribe la RAM y sirve para anotar el CRC de una parte del EFB a mitad de un DOL. `--sin-copias` saltea esa comparación. Con el video por software, Dolphin siempre escribe las copias en la RAM en el momento (no tiene copias a la VRAM), así que `EFBToTextureEnable` y `DeferEFBCopies` no cambian nada.
 
 ## Configuración de Dolphin
 
-`comparar.py` arranca Dolphin igual que el runner arranca la GameCube (D-032, D-036): intérprete, sin hilo de CPU aparte, IPL salteado, DSP HLE, región NTSC-U e inglés (sin esto Dolphin toma el país del sistema, y sin país usa PAL), sin tarjetas de memoria, mando estándar en el puerto 1 siempre conectado (`GCPadNew.ini` con `Always Connected`; sin dispositivos de entrada figuraría desenchufado) y los otros vacíos, reloj fijo (`EnableCustomRTC`, el mismo `--rtc` que el runner), video por software sin ventana (la referencia de las imágenes y de los vértices, D-041 y D-043), sin audio y sin límite de velocidad. El `.map` del DOL va a `Maps/<prueba>.map` del usuario de Dolphin, así Dolphin engancha los mismos `OSReport` (ganchos al inicio: no cambian el estado).
+`comparar.py` arranca Dolphin igual que el runner arranca la GameCube (D-032, D-036): intérprete, sin hilo de CPU aparte, IPL salteado, DSP HLE, región NTSC-U e inglés (sin esto Dolphin toma el país del sistema, y sin país usa PAL), sin tarjetas de memoria, mando estándar en el puerto 1 siempre conectado (`GCPadNew.ini` con `Always Connected`; sin dispositivos de entrada figuraría desenchufado) y los otros vacíos, reloj fijo (`EnableCustomRTC`, el mismo `--rtc` que el runner), video por software sin ventana (la referencia de las imágenes y de los vértices, D-041 y D-043), sin audio y sin límite de velocidad. Desde la etapa C3, además, con la lectura del EFB por el CPU y la caja envolvente prendidas (`EFBAccessEnable` y `BBoxEnable` en el `GFX.ini` del usuario: Dolphin las apaga por omisión para ir más rápido, el hardware las tiene; con `-C` no se aplican). Las referencias de los otros DOLs no cambiaron con eso. El `.map` del DOL va a `Maps/<prueba>.map` del usuario de Dolphin, así Dolphin engancha los mismos `OSReport` (ganchos al inicio: no cambian el estado).
 
 ## Resultado (2026-10-23; `gx_fifo`, `gx_tri` y `gx_raster` el 2026-10-24)
 
-Los 9 DOLs dan el mismo estado que Dolphin antes de cada instrucción, el mismo estado de GX y el mismo EFB al final y, los que dibujan, los mismos vértices y triángulos:
+Los 9 DOLs dan el mismo estado que Dolphin antes de cada instrucción, el mismo estado de GX y el mismo EFB al final y, los que dibujan, los mismos vértices, triángulos y copias:
 
 | DOL | Instrucciones comparadas | Qué cubre |
 | --- | --- | --- |
@@ -107,7 +107,7 @@ Los 9 DOLs dan el mismo estado que Dolphin antes de cada instrucción, el mismo 
 | `contador` | 30 000 000 | 3 interrupciones de video |
 | `gx_fifo` | 124 441 (completo), el estado de GX y 47 vértices | FIFO de GX, CP, PE (Fase 2, etapa A) |
 | `gx_tri` | 136 905 (completo), el estado de GX, 374 vértices y 254 triángulos | Vértices, luces y coordenadas de textura (Fase 2, etapa B) |
-| `gx_raster` | 116 515 (completo), el estado de GX, 231 vértices y 160 triángulos | Recorte, culling, líneas y puntos (Fase 2, etapa C) |
+| `gx_raster` | 252 690 (completo), el estado de GX, 1 649 vértices, 878 triángulos y 44 copias con el CRC del EFB | Recorte, culling, líneas y puntos (Fase 2, etapa C2); relleno, tijera, Z, mezcla, formatos, prueba de alfa, TEV, lectura del EFB y caja envolvente (C3) |
 
 Lo que hubo que cambiar para llegar ahí:
 

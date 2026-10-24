@@ -103,6 +103,10 @@ def run_dolphin(dolphin, dol, rtc, count, base, work, detalle=None):
     os.makedirs(os.path.join(user, "Config"))
     with open(os.path.join(user, "Config", "GCPadNew.ini"), "w", encoding="utf-8") as f:
         f.write("[GCPad1]\nOptions/Always Connected = True\n")
+    # Lo que el hardware hace y Dolphin apaga por omisión para ir más rápido (D-044):
+    # el CPU lee el EFB y la caja envolvente sigue a lo dibujado
+    with open(os.path.join(user, "Config", "GFX.ini"), "w", encoding="utf-8") as f:
+        f.write("[Hacks]\nEFBAccessEnable = True\nBBoxEnable = True\n")
     stem = os.path.splitext(os.path.basename(dol))[0]
     mapfile = os.path.splitext(dol)[0] + ".map"
     if os.path.exists(mapfile):

@@ -6,4 +6,17 @@ gx_raster: 3. lineas
 gx_raster: 4. puntos
 gx_raster: 5. sin deteccion de recorte
 gx_raster: 6. proyeccion ortografica
-gx_raster: 7 tokens; OK
+gx_raster: 7. relleno
+gx_raster: 8. tijera
+gx_raster: 9. Z
+gx_raster: 10. mezcla
+gx_raster: 11. formatos, prueba de alfa y TEV
+gx_raster: 12. dibujo para leer
+gx_raster: 12. formato RGB8
+gx_raster: 12. caja envolvente
+gx_raster: 12. caja sin escribir
+gx_raster: 12. caja escrita
+gx_raster: 12. caja escrita y dibujada
+gx_raster: 12. lecturas del EFB
+gx_raster: suma de las lecturas 98257c93
+gx_raster: 19 tokens; OK

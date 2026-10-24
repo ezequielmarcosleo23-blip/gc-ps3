@@ -67,7 +67,8 @@ static void test_regions(void)
     CHECK(gc_mem_region(0x0C006400u) == GC_REGION_MMIO);
     CHECK(gc_mem_region(0xE0000000u) == GC_REGION_LCACHE);
     CHECK(gc_mem_region(0xE0004000u) == GC_REGION_NONE);
-    CHECK(gc_mem_region(0xC8000000u) == GC_REGION_NONE);       /* EFB: más adelante */
+    CHECK(gc_mem_region(0xC8000000u) == GC_REGION_EFB);        /* acceso directo al EFB */
+    CHECK(gc_mem_region(0x0BFFFFFFu) == GC_REGION_EFB);
     CHECK(gc_mem_region(0x82000000u) == GC_REGION_NONE);
     CHECK(gc_mem_region(0x40000000u) == GC_REGION_NONE);
 }
@@ -116,7 +117,8 @@ static void test_mask_never_faults(void)
     gc_write32(&mem, 0x81FFFFFCu, 0xA5A5A5A5u);               /* cola del búfer: no falla */
     uint32_t tail = gc_read32(&mem, 0x81FFFFFCu);
     uint32_t outside = gc_read32(&mem, 0x82000000u);          /* fuera: 0, contado */
-    gc_write32(&mem, 0xC8000000u, 1);                          /* EFB: ignorado, contado */
+    gc_write32(&mem, 0x40000000u, 1);                          /* nada: ignorado, contado */
+    gc_write32(&mem, 0xC8000000u, 1);                          /* EFB: no hace nada, no cuenta */
     uint32_t bad = mem.bad;
     int warned = warnings;
     teardown();

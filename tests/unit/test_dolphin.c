@@ -401,6 +401,6 @@ const test_case_t dolphin_tests[] = {
     { "dolphin contador: 30 millones de instrucciones iguales a Dolphin", test_contador },
     { "dolphin gx_fifo: cada instrucción y el estado de GX iguales a Dolphin", test_gx_fifo },
     { "dolphin gx_tri: cada instrucción, el estado de GX y cada vértice iguales a Dolphin", test_gx_tri },
-    { "dolphin gx_raster: cada instrucción, vértice y triángulo iguales a Dolphin", test_gx_raster },
+    { "dolphin gx_raster: cada instrucción, vértice, triángulo y el EFB iguales a Dolphin", test_gx_raster },
     { NULL, NULL },
 };

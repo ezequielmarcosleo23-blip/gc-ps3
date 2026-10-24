@@ -29,8 +29,10 @@
  *
  * La RAM vive en un búfer de 32 MB y se direcciona con la máscara 0x01FFFFFF
  * (D-008): una dirección de RAM fuera de los 24 MB cae en la cola del búfer y
- * nunca falla. Lo que no es RAM, registros ni caché bloqueada (por ejemplo el
- * acceso directo al EFB en 0xC8000000) lee 0, ignora la escritura y se cuenta.
+ * nunca falla. El acceso directo al EFB (físicas 0x08000000-0x0BFFFFFF, en
+ * 0xC8000000) lo atiende GX: lee el color o la Z del píxel y la escritura no
+ * hace nada, como el renderizador por software de Dolphin. Lo que no es RAM,
+ * registros, EFB ni caché bloqueada lee 0, ignora la escritura y se cuenta.
  *
  * Gekko es big-endian como el PPU: en la PS3 los accesos son copias directas
  * y en la PC se invierten bytes (core/endian.h). Acepta direcciones no
@@ -57,7 +59,11 @@ typedef enum gc_region {
     GC_REGION_RAM,
     GC_REGION_MMIO,
     GC_REGION_LCACHE,
+    GC_REGION_EFB,
 } gc_region_t;
+
+#define GC_EFB_PHYS     0x08000000u
+#define GC_EFB_SPAN     0x04000000u   /* 0x08000000-0x0BFFFFFF */
 
 typedef struct gc_mem {
     uint8_t   *ram;        /* GC_RAM_ALLOC bytes, alineado a 64 KB */
@@ -65,6 +71,10 @@ typedef struct gc_mem {
     uint8_t   *lcache;     /* GC_LCACHE_SIZE bytes */
     gc_mmio_t  io;
     uint32_t   bad;        /* accesos a direcciones sin nada */
+    /* Lectura del EFB por el CPU (GX): la dirección física, 32 bits; las de 8
+     * y 16 se quedan con los de abajo y la de 64 los pone en la parte baja */
+    uint32_t (*efb_read)(void *ctx, uint32_t phys);
+    void      *efb_ctx;
     void      *raw[3];     /* lo que devolvió malloc, para liberar */
 } gc_mem_t;
 

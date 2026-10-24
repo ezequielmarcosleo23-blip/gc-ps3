@@ -223,6 +223,6 @@ const test_case_t program_tests[] = {
     { "dol hw: PI, SI, reloj, SRAM y UART del IPL, ARAM, DSP, DI y AI", test_hw },
     { "dol gx_fifo: FIFO de GX, marcas, display lists, tokens, breakpoint", test_gx_fifo },
     { "dol gx_tri: vértices de cada formato, luces y coordenadas de textura", test_gx_tri },
-    { "dol gx_raster: recorte, culling, líneas y puntos", test_gx_raster },
+    { "dol gx_raster: recorte, culling, líneas, puntos y píxeles", test_gx_raster },
     { NULL, NULL },
 };

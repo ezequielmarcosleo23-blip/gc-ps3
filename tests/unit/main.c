@@ -44,6 +44,7 @@ static const test_case_t *const suites[] = {
     prim_tests,
     efb_tests,
     setup_tests,
+    raster_tests,
     xfb_tests,
     hle_tests,
     program_tests,

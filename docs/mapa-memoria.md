@@ -9,7 +9,7 @@ Implementado en `src/core/mem.c` y `src/core/mmio.c` (Fase 1, etapa A). Las dire
 | `0x00000000`–`0x017FFFFF` | La misma RAM, física (traducción apagada, DMA) | El mismo búfer |
 | `0x81800000`–`0x81FFFFFF` | Fuera de los 24 MB | Cola del búfer: se lee y escribe sin fallar (D-008) |
 | `0xCC000000`–`0xCC00FFFF` | Registros de hardware (física `0x0C000000`) | Tabla de manejadores por páginas de 256 bytes |
-| `0xC8000000` | Acceso directo al EFB | Todavía no: lee 0, ignora escrituras, se cuenta |
+| `0xC8000000` | Acceso directo al EFB | Sí (Fase 2, C3): color o Z del píxel; escribir no hace nada, como el renderizador por software de Dolphin ([src/gx](../src/gx/README.md)) |
 | `0xE0000000`–`0xE0003FFF` | Caché bloqueada, 16 KB | Búfer aparte |
 | — | ARAM, 16 MB | Búfer aparte; sin dirección, la usa el DMA del DSP |
 | Cualquier otra | — | Lee 0, ignora escrituras, se cuenta en `gc_mem_t.bad`; las primeras 16 van al log |
@@ -37,4 +37,4 @@ Cada bloque registra un manejador con `gc_mmio_register()`; recibe el desplazami
 - **Máscara en vez de comprobar límites:** la RAM se direcciona con `& 0x01FFFFFF` sobre un búfer de 32 MB, así que un juego que lee fuera de sus 24 MB no tumba el emulador. El JIT podrá usar la misma base y la misma máscara para los accesos que sabe que son RAM; todo lo demás va por el camino lento (`gc_read32`...).
 - **Sin fallos de página:** lv2 no deja recibir la notificación de un fallo (D-008), así que nada depende de proteger páginas.
 - **Big-endian en los dos lados:** en la PS3 los accesos son copias directas; en la PC se invierten bytes. `make test-be` corre las mismas pruebas en PowerPC de 64 bits con QEMU para cubrir el camino de la consola.
-- **Fuera de alcance por ahora:** juegos que cambian el mapa con la MMU (tablas de páginas, por ejemplo Rogue Squadron) y el acceso directo al EFB.
+- **Fuera de alcance por ahora:** juegos que cambian el mapa con la MMU (tablas de páginas, por ejemplo Rogue Squadron).

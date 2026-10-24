@@ -22,13 +22,16 @@
  * Registros de BP: VideoCommon/BPStructs.cpp de Dolphin (LoadBPReg y
  * BPWritten). El valor nuevo pasa por la máscara de BP (0xFE), que vuelve a
  * 0xFFFFFF después de cualquier otra escritura. Hacen algo el token (0x47,
- * 0x48), "draw done" (0x45 = 2) y la copia del EFB (0x52, copy.c); el resto se
- * guarda, y los otros registros que disparan algo (cargas de TLUT y de TMEM...)
- * se avisan una vez en el log hasta que se implementen.
+ * 0x48), "draw done" (0x45 = 2), la copia del EFB (0x52, copy.c), la tijera
+ * (0x20, 0x21, 0x59), la caja envolvente (0x55, 0x56) y los colores del TEV
+ * (0xE0-0xE7); el resto se guarda y se lee al dibujar, y los otros registros
+ * que disparan algo (cargas de TLUT y de TMEM...) se avisan una vez en el log
+ * hasta que se implementen.
  */
 #include "core/log.h"
 #include "core/system.h"
 #include "gx/gx.h"
+#include "gx/raster.h"
 
 /* Los que tienen efecto aunque se escriba el mismo valor (BPWritten) */
 static int always_acts(uint8_t reg)
@@ -86,6 +89,29 @@ void gc_gx_load_bp(gc_gx_t *gx, uint8_t reg, uint32_t value)
     case GX_BP_COPY:
         gc_gx_efb_copy(gx);
         return;
+    case 0x20: case 0x21: case 0x59:    /* tijera: los rectángulos se recalculan al dibujar */
+        gx->raster->scissor_dirty = 1;
+        return;
+    case 0x55: case 0x56: {             /* BPMEM_CLEARBBOX1/2 */
+        const uint32_t i = reg & 2u;
+        gc_gx_bbox_set(gx, i, (uint16_t)(nv & 0x3FFu));
+        gc_gx_bbox_set(gx, i + 1, (uint16_t)(nv >> 10));
+        return;
+    }
+    case 0x57:                          /* BPMEM_CLEAR_PIXEL_PERF: sin contadores (como Dolphin) */
+        return;
+    case 0xE0: case 0xE2: case 0xE4: case 0xE6: {   /* TEV: rojo y alfa */
+        int16_t *c = (nv >> 23) & 1u ? gx->tev_kcolor[(reg >> 1) & 3u] : gx->tev_color[(reg >> 1) & 3u];
+        c[0] = (int16_t)((int32_t)(nv << 21) >> 21);
+        c[3] = (int16_t)((int32_t)(nv << 9) >> 21);
+        return;
+    }
+    case 0xE1: case 0xE3: case 0xE5: case 0xE7: {   /* TEV: azul y verde */
+        int16_t *c = (nv >> 23) & 1u ? gx->tev_kcolor[(reg >> 1) & 3u] : gx->tev_color[(reg >> 1) & 3u];
+        c[2] = (int16_t)((int32_t)(nv << 21) >> 21);
+        c[1] = (int16_t)((int32_t)(nv << 9) >> 21);
+        return;
+    }
     default:
         if (always_acts(reg))
             note_pending(gx, reg, nv);

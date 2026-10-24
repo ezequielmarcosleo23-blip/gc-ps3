@@ -426,6 +426,7 @@ static void process_point(gc_gx_t *gx, gx_rvtx_t *center)
 
 void gx_setup_begin(gc_gx_t *gx, uint32_t type)
 {
+    gc_gx_bbox_flush(gx);                       /* SWVertexLoader::DrawCurrentBatch */
     gx_raster_t *r = gx->raster;
     r->type = type;
     r->count = 0;

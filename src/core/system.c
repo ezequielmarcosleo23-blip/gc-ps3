@@ -66,6 +66,11 @@ static void reset_hardware(gc_system_t *s, int pal)
     gc_gx_reset(&s->gx);
 }
 
+static uint32_t efb_read(void *ctx, uint32_t phys)
+{
+    return gc_gx_efb_peek(ctx, phys);
+}
+
 int gc_system_init(gc_system_t *s)
 {
     memset(s, 0, sizeof *s);
@@ -75,6 +80,8 @@ int gc_system_init(gc_system_t *s)
         gc_mem_free(&s->mem);
         return -1;
     }
+    s->mem.efb_read = efb_read;
+    s->mem.efb_ctx = &s->gx;
     gekko_reset(&s->cpu, &s->mem);
     s->cpu.hle = gc_hle_dispatch;
     s->cpu.hle_ctx = s;

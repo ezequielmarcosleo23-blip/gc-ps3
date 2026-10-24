@@ -19,7 +19,7 @@ Todo lo anterior a la lista de dibujo es portable y se prueba en el CI; el RSX, 
 | --- | --- | --- | --- |
 | A. FIFO y Command Processor | FIFO de GX en la RAM (write-gather pipe, punteros del PI y del CP, vuelta, marcas alta y baja), lector de comandos (registros de CP/XF/BP, cargas indexadas, display lists, invalidación de la caché de vértices, primitivas que por ahora solo se saltan), estado de BP/CP/XF, Pixel Engine (tokens, "draw done", interrupciones) | Unitarias, DOL `gx_fifo` con una mini-librería GX propia, traza de Dolphin | Completa (2026-10-24), ver abajo |
 | B. Vértices y XF | Formatos de vértice (VAT/VCD, directo e índices de 8 y 16 bits), tipos de componente y de color, matrices indexadas, proyección, normales, coordenadas de textura, 8 luces | Unitarias con valores calculados; DOL `gx_tri` contra los vértices del video por software de Dolphin | Completa (2026-10-24), ver abajo |
-| C. Rasterizador de referencia | Viewport, primitivas, recorte, culling, Z en los formatos del EFB, scissor, TEV en enteros como el hardware, alpha test, mezcla, todos los formatos de textura con paleta y filtros, copias del EFB a la RAM (XFB y texturas). Corre también en la PS3 hasta que dibuje el RSX (cambia el punto 1 de D-041) | DOLs `gx_raster`, `gx_tex`, `gx_tev`, `gx_copy`, `gx_escena`; cada triángulo, el EFB y cada copia contra el renderizador por software de Dolphin | En curso: C1 y C2 completos, ver abajo |
+| C. Rasterizador de referencia | Viewport, primitivas, recorte, culling, Z en los formatos del EFB, scissor, TEV en enteros como el hardware, alpha test, mezcla, todos los formatos de textura con paleta y filtros, copias del EFB a la RAM (XFB y texturas). Corre también en la PS3 hasta que dibuje el RSX (cambia el punto 1 de D-041) | DOLs `gx_raster`, `gx_tex`, `gx_tev`, `gx_copy`, `gx_escena`; cada triángulo, el EFB y cada copia contra el renderizador por software de Dolphin | En curso: C1 a C3 completos, ver abajo |
 | D. Backend RSX | EFB como destino de rsxkit, vértices al RSX, TEV a fragment programs, texturas decodificadas (CMPR a DXT1), copias del EFB al XFB pasando por la RAM, en la app | RPCS3: la app anota la comparación de cada cuadro con el runner y `compare_log` la revisa | Pendiente |
 | E. Cierre | Criterio de salida, documentos y decisiones | CI y RPCS3 | Pendiente |
 
@@ -56,13 +56,24 @@ Plan aprobado el 2026-10-24: se porta el renderizador por software de Dolphin y 
 | --- | --- | --- |
 | C1. Referencia | El parche anota cada copia del EFB (`GCPS3_COPIAS`: parámetros, CRC del EFB y de lo escrito en la RAM; al final, el EFB entero) y cada triángulo que llega al rasterizador (`GCPS3_TRIANGULOS`). El runner da lo mismo con `--copias` y `--triangulos`; `comparar.py` y `test_dolphin` los comparan. EFB de 640 × 528 con los formatos de píxel y el borrado al copiar ([src/gx/efb.c](../src/gx/efb.c), [copy.c](../src/gx/copy.c)) | Completo (2026-10-24) |
 | C2. Ensamblado y recorte | El orden de IndexGenerator, recorte contra los 6 planos con la interpolación de Dolphin, culling, división por w y viewport, líneas y puntos como triángulos con su ancho y el desplazamiento de las coordenadas ([src/gx/setup.c](../src/gx/setup.c)). DOL `gx_raster`: los 160 triángulos iguales a Dolphin, bit a bit | Completo (2026-10-24) |
-| C3. Rasterizador y EFB | Bordes, scissor, interpolación, Z, zfreeze, mezcla, lógicas, dither, lectura del EFB desde la CPU, bounding box | |
+| C3. Rasterizador y EFB | Rectángulos de tijera (con la vuelta por 1024), aristas en 28.4 con la convención de relleno, bloques de 2 × 2, pendientes de Z, 1/w, colores y coordenadas, LOD, zfreeze ([src/gx/raster.c](../src/gx/raster.c)); el TEV entero salvo el muestreo de texturas, que da negro hasta C4 ([tev.c](../src/gx/tev.c)); Z temprana y tardía, mezcla, resta, lógicas, alfa de destino, máscaras y dither ([efb.c](../src/gx/efb.c)); la caja envolvente ([bbox.c](../src/gx/bbox.c)) y la lectura del EFB por el CPU en 0xC8000000. DOL `gx_raster`, partes 7 a 12: igual a Dolphin en sus 252 690 instrucciones (con las lecturas del EFB y de la caja), 1 649 vértices, 878 triángulos y 44 copias con el CRC del EFB. 17 de 20 mutaciones detectadas (ver abajo) | Completo (2026-10-24) |
 | C4. Texturas | Los 11 formatos, TLUT, TMEM, filtros, mipmaps; decodificadores listos para SPU | |
-| C5. TEV | 16 etapas, alpha test, niebla, textura de Z, indirectas | |
+| C5. TEV | Ya portado en C3: el DOL `gx_tev` lo recorre entero (16 etapas, constantes, tablas de swap, comparaciones, alpha test, niebla con `pow`, textura de Z, indirectas con texturas) | |
 | C6. Copias del EFB | A textura y al XFB; la imagen en pantalla | |
 | C7. Verificación | Mutaciones, tiempo por cuadro, docs, D-044 | |
 
 Con un lote de Dolphin, lo que no lo vacía se aplica a todo el lote al dibujarlo: además de XF 0x1018/0x1019 (etapa B), XF 0x1005 (sin detección de recorte). Los DOLs vacían el lote antes de volver a cambiarlo.
+
+Lo que se sigue de Dolphin aunque el hardware sea otro (va a D-044):
+
+- La referencia corre con `EFBAccessEnable` y `BBoxEnable` prendidos (Dolphin los apaga por omisión para ir más rápido; los juegos que los necesitan los prenden en su INI). `comparar.py` los pone en el `GFX.ini` del usuario: con `-C` no se aplican.
+- La caja envolvente tiene la caché de VideoCommon: escribir un valor igual al que guarda no lo marca, así que el 1023 0 1023 0 del SDK no vuelve a 0 la derecha y abajo si ya eran 0, y queda lo dibujado antes. Después de leerla queda apagada hasta la próxima escritura.
+- Los contadores de rendimiento del PE dan 0 (`PerfQueriesEnable` apagado; la versión de Dolphin cuenta uno de cada 3 píxeles).
+- El TEV es un objeto estático: el color de un canal que no está activo, la textura de una etapa sin textura y la coordenada de una que no existe quedan del píxel anterior.
+- La niebla de rango lee `K[5]`, que cae en el registro de la niebla `a` (BP 0xEE).
+- Los rectángulos de tijera se recalculan al dibujar si cambió BP 0x20, 0x21, 0x59 o el viewport, y después de una copia con borrado; antes del primer cambio no hay ninguno y no se dibuja nada.
+
+Las 3 mutaciones que `gx_raster` no detecta: el desempate de los rectángulos de tijera por área (solo se nota dibujando fuera del viewport), el sesgo del LOD (hace falta una textura, C4) y el recálculo de la tijera después de borrar (ya está al día por los cambios).
 
 ## Criterio de salida
 

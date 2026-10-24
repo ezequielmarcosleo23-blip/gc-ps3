@@ -1,6 +1,8 @@
 # gc-ps3 huella v1: Dolphin cf5cb7ef paso a paso (tools/dolphin-trace)
 # dol gx_raster.dol
 # reloj 845791192
-# instrucciones 116515
-65536 80003128 69bd1f923f4044a9
-116515 80003158 c7a38a2646344e8c
+# instrucciones 252690
+65536 80003128 d92f88fe4350546b
+131072 80005558 bca6d1ba53c3e3e0
+196608 800098c4 ef5798fceecd9ca9
+252690 80003158 3cdc0c1a9bbc467e

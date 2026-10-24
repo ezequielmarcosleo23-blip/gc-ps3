@@ -60,6 +60,13 @@ void     gx_efb_set_depth(gx_efb_t *e, const gx_efb_write_t *w, uint32_t x, uint
 uint32_t gx_efb_get_color(const gx_efb_t *e, uint32_t pf, uint32_t x, uint32_t y);
 uint32_t gx_efb_get_depth(const gx_efb_t *e, uint32_t pf, uint32_t x, uint32_t y);
 
+/* La prueba de Z (ZCompare): compara con BP 0x40 y escribe si pasa y la
+ * máscara lo deja. bp es la memoria de BP (zmode 0x40, formato 0x43). */
+int      gx_efb_zcompare(gx_efb_t *e, const uint32_t *bp, uint32_t x, uint32_t y, uint32_t z);
+/* La mezcla con el EFB (BlendTev): blend, resta, operación lógica, alfa de
+ * destino (BP 0x42), dither y las máscaras de BP 0x41. color es 0xRRGGBBAA. */
+void     gx_efb_blend(gx_efb_t *e, const uint32_t *bp, uint32_t x, uint32_t y, uint32_t color);
+
 /* CRC-32 de [x0, x1) × [y0, y1): los 3 bytes de cada color (el menos
  * significativo primero, como en la memoria de Dolphin), fila por fila, y
  * aparte los de Z (el volcado de GCPS3_COPIAS) */

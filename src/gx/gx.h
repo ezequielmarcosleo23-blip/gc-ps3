@@ -134,6 +134,21 @@ typedef struct gc_gx {
     void    (*triangle_cb)(void *ctx, const struct gx_rvtx *const v[3], uint32_t ntex);
     void     *triangle_ctx;
 
+    /* TEV (etapa C, tev.c): los registros de color y las constantes de BP
+     * 0xE0-0xE7, r g b a (PixelShaderManager colors y kcolors) */
+    int16_t   tev_color[4][4];
+    int16_t   tev_kcolor[4][4];
+    int       tex_noted;              /* ya se avisó que faltan las texturas (C4) */
+
+    /* Caja envolvente (bbox.c): lo que guarda VideoCommon (BoundingBox) y las
+     * coordenadas que lleva el renderizador (BBoxManager) */
+    struct {
+        int32_t  value[4];            /* izquierda, derecha, arriba, abajo */
+        uint8_t  dirty[4];
+        uint8_t  valid, active;
+        uint16_t coord[4];
+    } bbox;
+
     /* EFB y copias (etapa C, efb.c y copy.c) */
     gx_efb_t *efb;
     /* Cada copia del EFB en texto (el volcado de Dolphin, GCPS3_COPIAS) */
@@ -207,8 +222,22 @@ void gc_gx_vertex_text(const struct gx_vtx_out *v, uint32_t ntex, char buf[GC_GX
 void gc_gx_efb_copy(gc_gx_t *gx);
 /* La última línea del volcado de copias: el CRC del EFB entero */
 void gc_gx_efb_final(gc_gx_t *gx);
+/* Lectura del CPU en 0x08000000-0x0BFFFFFF (EFB_Read de Dolphin): color o Z
+ * del píxel; la escritura (Poke) no hace nada con el renderizador por software */
+uint32_t gc_gx_efb_peek(gc_gx_t *gx, uint32_t phys);
 /* Las máscaras de escritura del EFB según BP 0x40, 0x41 y 0x43 */
 gx_efb_write_t gc_gx_efb_write_mask(const gc_gx_t *gx);
+
+/* ---- caja envolvente (bbox.c) ---- */
+
+/* BP 0x55 y 0x56: activa la caja y escribe dos valores (BoundingBox::Set) */
+void     gc_gx_bbox_set(gc_gx_t *gx, uint32_t index, uint16_t value);
+/* Al dibujar un lote, si está activa: lo escrito pasa al renderizador (Flush) */
+void     gc_gx_bbox_flush(gc_gx_t *gx);
+/* Cada píxel que llega a la mezcla, redondeado a su cuadro de 2 × 2 */
+void     gc_gx_bbox_update(gc_gx_t *gx, uint32_t x, uint32_t y);
+/* El PE lee un valor: desactiva la caja y lee del renderizador si hace falta */
+uint16_t gc_gx_bbox_get(gc_gx_t *gx, uint32_t index);
 
 /* ---- estado completo para comparar con Dolphin (estado.c) ---- */
 

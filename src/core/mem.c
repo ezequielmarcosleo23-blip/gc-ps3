@@ -65,6 +65,8 @@ gc_region_t gc_mem_region(uint32_t addr)
             return GC_REGION_RAM;
         if (phys - GC_MMIO_PHYS < GC_MMIO_SPAN)
             return GC_REGION_MMIO;
+        if (phys - GC_EFB_PHYS < GC_EFB_SPAN)
+            return GC_REGION_EFB;
         return GC_REGION_NONE;
     }
     if (addr - GC_LCACHE_BASE < GC_LCACHE_SIZE)
@@ -117,6 +119,8 @@ static uint32_t read_n(gc_mem_t *m, uint32_t addr, int size)
     }
     if (r == GC_REGION_MMIO)
         return gc_mmio_read(&m->io, gc_mem_phys(addr), size);
+    if (r == GC_REGION_EFB)
+        return m->efb_read ? m->efb_read(m->efb_ctx, gc_mem_phys(addr)) : 0;
     bad_access(m, "lectura", addr, size);
     return 0;
 }
@@ -142,6 +146,8 @@ static void write_n(gc_mem_t *m, uint32_t addr, uint32_t v, int size)
         gc_mmio_write(&m->io, gc_mem_phys(addr), v, size);
         return;
     }
+    if (r == GC_REGION_EFB)
+        return;                                /* PokeColor/PokeDepth: nada */
     bad_access(m, "escritura", addr, size);
 }
 
@@ -158,6 +164,8 @@ uint32_t gc_read32(gc_mem_t *m, uint32_t addr) { return read_n(m, addr, 4); }
 /* 64 bits = dos de 32 (palabra alta primero), también en los registros. */
 uint64_t gc_read64(gc_mem_t *m, uint32_t addr)
 {
+    if (gc_mem_region(addr) == GC_REGION_EFB)  /* EFB_Read devuelve 32 bits */
+        return read_n(m, addr, 4);
     const uint64_t hi = read_n(m, addr, 4);
     return (hi << 32) | read_n(m, addr + 4, 4);
 }
@@ -177,6 +185,8 @@ void gc_write32(gc_mem_t *m, uint32_t addr, uint32_t v) { write_n(m, addr, v, 4)
 
 void gc_write64(gc_mem_t *m, uint32_t addr, uint64_t v)
 {
+    if (gc_mem_region(addr) == GC_REGION_EFB)
+        return;
     write_n(m, addr, (uint32_t)(v >> 32), 4);
     write_n(m, addr + 4, (uint32_t)v, 4);
 }

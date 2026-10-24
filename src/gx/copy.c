@@ -42,6 +42,8 @@
 #include "core/system.h"
 #include "gx/efb.h"
 #include "gx/gx.h"
+#include "gx/raster.h"
+#include "gx/x86.h"
 
 #define LOG_MAX 16
 
@@ -61,15 +63,6 @@ enum {
 static uint32_t bits(uint32_t v, unsigned at, unsigned n)
 {
     return (v >> at) & ((1u << n) - 1u);
-}
-
-/* static_cast<u32>(float) de x86-64: cvttss2si de 64 bits y los 32 de abajo;
- * NaN o fuera de rango da 0 */
-static uint32_t float_to_u32(float f)
-{
-    if (!(f > -9223372036854775808.0f && f < 9223372036854775808.0f))
-        return 0;
-    return (uint32_t)(uint64_t)(int64_t)f;
 }
 
 gx_efb_write_t gc_gx_efb_write_mask(const gc_gx_t *gx)
@@ -179,6 +172,8 @@ void gc_gx_efb_copy(gc_gx_t *gx)
         if (raw_l >= GX_EFB_WIDTH || raw_t >= GX_EFB_HEIGHT) {
             snprintf(line + n, sizeof line - (size_t)n, " fuera");
             log_line(gx, line);
+            if (bits(trig, 14, 1))
+                gx->bbox.active = 0;                /* como el camino normal al XFB */
             return;                                 /* ni copia ni borrado */
         }
         if (r > GX_EFB_WIDTH)
@@ -193,11 +188,12 @@ void gc_gx_efb_copy(gc_gx_t *gx)
         if (!bits(trig, 14, 1)) {                   /* a textura */
             const uint32_t tp = bits(trig, 3, 4);
             copy_size(tp / 2 + (tp & 1u) * 8, (int)bits(trig, 9, 1), w, h, &bytes_per_row, &rows);
-        } else {                                    /* al XFB */
+        } else {                                    /* al XFB: apaga la caja envolvente */
+            gx->bbox.active = 0;
             const uint32_t ys = gx->bp[BP_COPY_YSCALE];
             const float scale = bits(trig, 10, 1) ? 256.0f / (float)ys : (float)ys / 256.0f;
             const float lines = 1.0f + (float)bits(wh, 10, 10) * scale;
-            copy_size(EFB_COPY_XFB, 0, w, float_to_u32(lines), &bytes_per_row, &rows);
+            copy_size(EFB_COPY_XFB, 0, w, gx_x86_f2u(lines), &bytes_per_row, &rows);
         }
         /* La conversión a la RAM llega en el paso C6 */
         if (gx->warnings++ < LOG_MAX)
@@ -217,8 +213,29 @@ void gc_gx_efb_copy(gc_gx_t *gx)
         log_line(gx, line);
     }
 
-    if (bits(trig, 11, 1))
+    if (bits(trig, 11, 1)) {
         clear(gx);
+        gx_raster_scissor_changed(gx);              /* "Scissor rect must be restored" */
+    }
+}
+
+uint32_t gc_gx_efb_peek(gc_gx_t *gx, uint32_t phys)
+{
+    const uint32_t x = (phys & 0xFFFu) >> 2, y = (phys >> 12) & 0x3FFu;
+    if (phys & 0x00800000u)
+        return 0;                                   /* Z + color: Dolphin no lo emula */
+    if (x >= GX_EFB_WIDTH || y >= GX_EFB_HEIGHT)
+        return 0;
+    const uint32_t pf = bits(gx->bp[BP_ZCONTROL], 0, 3);
+    if (phys & 0x00400000u)
+        return gx_efb_get_depth(gx->efb, pf, x, y);
+    const uint32_t c = gx_efb_get_color(gx->efb, pf, x, y);
+    const uint32_t argb = c >> 8 | (c & 0xFFu) << 24;
+    switch (gx->sys->pe.alpharead & 3u) {           /* GX_PokeAlphaRead */
+    case 1: return argb | 0xFF000000u;
+    case 2: return argb;
+    default: return argb & 0x00FFFFFFu;
+    }
 }
 
 void gc_gx_efb_final(gc_gx_t *gx)

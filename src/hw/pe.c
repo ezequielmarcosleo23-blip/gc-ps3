@@ -98,8 +98,10 @@ static uint16_t pe_read16(gc_pe_t *pe, uint32_t off)
     case PE_CTRL:  return pe->ctrl;
     case PE_TOKEN: return pe->token;
     default:
-        /* Caja envolvente y contadores: Dolphin con el video Null da 0 (BBox
-         * apagado, sin consultas de rendimiento); llegan con el backend. */
+        /* Caja envolvente (gx/bbox.c). Contadores de rendimiento: 0, como
+         * Dolphin con PerfQueriesEnable apagado (lo normal). */
+        if (off >= PE_BBOX_FIRST && off <= PE_BBOX_LAST && !(off & 1u))
+            return gc_gx_bbox_get(&pe->sys->gx, (off - PE_BBOX_FIRST) >> 1);
         if (off >= PE_BBOX_FIRST && off <= PE_PERF_LAST)
             return 0;
         if (pe->bad++ < LOG_MAX)
