@@ -150,6 +150,11 @@ void gc_gx_reset(gc_gx_t *gx)
     gx->tex_noted = 0;
     if (gx->tmem)
         memset(gx->tmem, 0, GX_TMEM_SIZE);
+    free(gx->staging);
+    gx->staging = NULL;
+    gx->staging_size = 0;
+    if (gx->xfb_source)
+        memset(gx->xfb_source, 0, GX_XFB_SOURCE_SIZE);
     memset(&gx->bbox, 0, sizeof gx->bbox);
     gx->bbox.valid = 1;
 }
@@ -161,7 +166,8 @@ int gc_gx_init(gc_gx_t *gx, struct gc_system *sys)
     gx->efb = malloc(sizeof *gx->efb);
     gx->raster = calloc(1, sizeof *gx->raster);
     gx->tmem = malloc(GX_TMEM_SIZE);
-    if (!gx->vbuf || !gx->efb || !gx->raster || !gx->tmem || gc_gx_vtx_init(gx) != 0) {
+    gx->xfb_source = malloc(GX_XFB_SOURCE_SIZE);
+    if (!gx->vbuf || !gx->efb || !gx->raster || !gx->tmem || !gx->xfb_source || gc_gx_vtx_init(gx) != 0) {
         gc_gx_free(gx);
         return -1;
     }
@@ -179,5 +185,10 @@ void gc_gx_free(gc_gx_t *gx)
     gx->raster = NULL;
     free(gx->tmem);
     gx->tmem = NULL;
+    free(gx->staging);
+    gx->staging = NULL;
+    gx->staging_size = 0;
+    free(gx->xfb_source);
+    gx->xfb_source = NULL;
     gc_gx_vtx_free(gx);
 }

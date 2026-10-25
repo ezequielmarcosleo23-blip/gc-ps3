@@ -392,6 +392,7 @@ static void test_gx_tri(void)   { CHECK(check_dol("gx_tri")); }
 static void test_gx_raster(void) { CHECK(check_dol("gx_raster")); }
 static void test_gx_tex(void) { CHECK(check_dol("gx_tex")); }
 static void test_gx_tev(void) { CHECK(check_dol("gx_tev")); }
+static void test_gx_copy(void) { CHECK(check_dol("gx_copy")); }
 
 const test_case_t dolphin_tests[] = {
     { "huella: formato v1 (el mismo del parche de Dolphin)", test_huella_format },
@@ -406,5 +407,6 @@ const test_case_t dolphin_tests[] = {
     { "dolphin gx_raster: cada instrucción, vértice, triángulo y el EFB iguales a Dolphin", test_gx_raster },
     { "dolphin gx_tex: cada instrucción, vértice, triángulo y el EFB con texturas iguales a Dolphin", test_gx_tex },
     { "dolphin gx_tev: cada instrucción, vértice, triángulo y el EFB con el TEV completo iguales a Dolphin", test_gx_tev },
+    { "dolphin gx_copy: cada instrucción y cada copia a la RAM iguales a Dolphin", test_gx_copy },
     { NULL, NULL },
 };

@@ -45,6 +45,8 @@
 #include "gx/efb.h"
 
 #define GC_GX_SLOT       1000             /* GPU_TIME_SLOT_SIZE */
+#define GX_XFB_SOURCE_SIZE (GX_EFB_WIDTH * GX_EFB_HEIGHT * 2u)  /* pares Y/UV (copy.c) */
+#define GX_STAGING_MAX     (GX_EFB_WIDTH * 4u * 1024u * 4u)   /* el de Dolphin: 2560 × 1024 × 4 */
 #define GC_GX_VBUF_SIZE  (2u << 20)       /* FIFO_SIZE de Dolphin: lo más largo que espera un comando */
 
 /* Memoria de XF que se ve por comandos: matrices, luces y registros (XFMemory) */
@@ -141,6 +143,13 @@ typedef struct gc_gx {
 
     /* TMEM: 1 MB de paletas y texturas precargadas (tex.c) */
     uint8_t  *tmem;
+
+    /* Copias del EFB (copy.c, paso C6): el búfer intermedio de Dolphin (su
+     * "staging texture", que se reusa y crece hasta lo que pidan las copias) y
+     * los pares Y/UV de la copia al XFB (640 × 528); los dos quedan entre copias */
+    uint8_t  *staging;
+    uint32_t  staging_size;
+    uint8_t  *xfb_source;
 
     /* Caja envolvente (bbox.c): lo que guarda VideoCommon (BoundingBox) y las
      * coordenadas que lleva el renderizador (BBoxManager) */

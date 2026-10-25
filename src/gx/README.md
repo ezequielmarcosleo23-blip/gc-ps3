@@ -23,7 +23,9 @@ Fase 2 ([docs/fase2.md](../../docs/fase2.md)): etapas A (FIFO y estado), B (vér
 | `bbox.c` | La caja envolvente con la caché de VideoCommon | `VideoCommon/BoundingBox.cpp`, `SWBoundingBox.cpp` |
 | `texdec.h`, `texdec.c` | Decodificadores de texturas, listos para SPU: los 11 formatos con las 3 paletas, por texel y la textura entera de a bloques | `VideoCommon/TextureDecoder_Common.cpp` |
 | `tex.c` | La TMEM (1 MB) con la carga de paletas y la precarga (BP 0x63, 0x65) y el muestreador: envolturas, más cercano y bilineal, mipmaps | `BPStructs.cpp`, `VideoBackends/Software/TextureSampler.cpp` |
-| `copy.c` | BP 0x52: rectángulo, tamaño en la RAM, borrado; el volcado de copias; la lectura del EFB por el CPU | `BPStructs.cpp`, `TextureCacheBase.cpp`, `BPFunctions.cpp`, `EfbCopy.cpp`, `EFBInterface.cpp` |
+| `copy.c` | BP 0x52: rectángulo, tamaño en la RAM, el búfer intermedio y la escritura a la RAM, borrado; el volcado de copias; la lectura del EFB por el CPU | `BPStructs.cpp`, `TextureCacheBase.cpp`, `AbstractStagingTexture.cpp`, `BPFunctions.cpp`, `EfbCopy.cpp`, `EFBInterface.cpp` |
+| `texenc.h`, `texenc.c` | Copias a textura, listas para SPU: los 13 formatos desde RGB8, RGBA6, RGB565 y la Z, intensidad, media escala | `VideoBackends/Software/TextureEncoder.cpp` |
+| `xfbenc.c` | Copia al XFB, lista para SPU: filtro vertical, recortes, gamma, YUV 4:2:2, escala vertical | `VideoBackends/Software/SWEfbInterface.cpp` (EncodeXFB), `CopyRegion.h` |
 | `x86.h` | Las conversiones de float a entero como en x86-64 (fuera de rango o NaN) | |
 | `estado.c` | El estado en texto para compararlo con Dolphin | El parche de `tools/dolphin-trace` |
 
@@ -87,7 +89,7 @@ Listo para SPU quiere decir búfer a búfer, sin estado global ni punteros a la 
 
 ## Pruebas
 
-`tests/unit/test_gx.c` (19 pruebas), `test_vtx.c` (10), `test_xform.c` (12), `test_prim.c` (6), `test_efb.c` (5), `test_setup.c` (5), `test_raster.c` (8) y `test_tex.c` (6), y los DOLs `gx_fifo`, `gx_tri`, `gx_raster`, `gx_tex` y `gx_tev` ([tests/dol](../../tests/dol/README.md)), iguales a Dolphin instrucción por instrucción, con el mismo estado de GX y EFB al final y los mismos vértices, triángulos y copias bit a bit ([docs/traza-dolphin.md](../../docs/traza-dolphin.md)).
+`tests/unit/test_gx.c` (19 pruebas), `test_vtx.c` (10), `test_xform.c` (12), `test_prim.c` (6), `test_efb.c` (5), `test_setup.c` (5), `test_raster.c` (8), `test_tex.c` (6) y `test_copy.c` (7), y los DOLs `gx_fifo`, `gx_tri`, `gx_raster`, `gx_tex`, `gx_tev` y `gx_copy` ([tests/dol](../../tests/dol/README.md)), iguales a Dolphin instrucción por instrucción, con el mismo estado de GX y EFB al final y los mismos vértices, triángulos y copias bit a bit ([docs/traza-dolphin.md](../../docs/traza-dolphin.md)).
 
 ## Del triángulo al píxel (etapa C3)
 
@@ -124,5 +126,16 @@ Sin caché, como Dolphin por software: cada texel se lee de la RAM (desde la dir
 | Después | Prueba de alfa (dos comparaciones y una lógica), textura de Z con el texel sin swap, niebla (perspectiva u ortográfica, rango, el caso NaN, 2^x de `exp2.c`), Z tardía |
 
 `tools/exp2/comprobar.c` compara `gx_exp2` con `pow(2, x)` de la libm para todos los floats de [-8, 0] (unos 75 s con 2 hilos); `tools/exp2/gen_tabla.py` genera sus constantes.
+
+## Copias del EFB (etapa C6)
+
+| Paso | Cómo es |
+| --- | --- |
+| EFB | El color y la Z de corrido en un solo arreglo (`px`), como `efb[]` de Dolphin: el relleno de los bloques lee la fila siguiente y, debajo del color, la Z |
+| A textura | El texel (s, t) lee el píxel (s, t) o el cuadro de 2 × 2 en (2s, 2t); los bloques salen del tamaño pedido sin recortar; de 6 a 8 bits con (v << 2) \| (v >> 4), media escala con s + (s >> 6) en RGBA6 y el promedio de bytes en RGB8; intensidad (4096 + 66 r + 129 g + 25 b) >> 8 en R4, R8, RA4 y RA8; desde la Z, los bytes alto, medio y bajo |
+| Al XFB | Cada píxel con el de arriba y el de abajo (coeficientes 0-1, 2-4, 5-6; suma >> 6 hasta 255; sin recorte, los vecinos salen de fuera del rectángulo), la gamma de la tabla, YUV con los redondeos de Dolphin, U y V promediados 1/4, 1/2, 1/4 y la escala vertical por el vecino más cercano |
+| A la RAM | Por el búfer intermedio de Dolphin (crece hasta lo que se pide, como mucho sus 10 MB, y queda entre copias): las filas de bloques cada "paso" y después min(bytes por fila, paso) de cada fila a la RAM; fuera de la RAM no se copia nada |
+
+`tools/gamma/tabla.c` genera la tabla de la gamma con `powf` de glibc, como la calcula Dolphin.
 
 Las conversiones de float a entero siguen a x86-64 (`x86.h`) y la aritmética entera que en Dolphin puede desbordar se hace con la vuelta de 32 bits. Lo que en Dolphin escribe fuera de sus arreglos (más de 2 canales, 8 coordenadas o 4 etapas indirectas en genMode) se recorta a esos máximos.

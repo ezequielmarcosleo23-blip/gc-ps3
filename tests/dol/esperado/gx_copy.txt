@@ -1,0 +1,11 @@
+gx_copy: copias del EFB
+gx_copy: estado inicial
+gx_copy: 1. a textura desde RGB8
+gx_copy: 2. a textura desde RGBA6
+gx_copy: 3. a textura desde RGB565
+gx_copy: 4. desde la Z
+gx_copy: 5. rectangulos raros
+gx_copy: 6. copias como texturas
+gx_copy: 7. al XFB
+gx_copy: 8. en pantalla
+gx_copy: 9 tokens, 382304 bytes de copias; OK

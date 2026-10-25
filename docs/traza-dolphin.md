@@ -91,11 +91,11 @@ Cada float va con sus 8 dígitos hexadecimales, y un NaN siempre como `7fc00000`
 
 ## Configuración de Dolphin
 
-`comparar.py` arranca Dolphin igual que el runner arranca la GameCube (D-032, D-036): intérprete, sin hilo de CPU aparte, IPL salteado, DSP HLE, región NTSC-U e inglés (sin esto Dolphin toma el país del sistema, y sin país usa PAL), sin tarjetas de memoria, mando estándar en el puerto 1 siempre conectado (`GCPadNew.ini` con `Always Connected`; sin dispositivos de entrada figuraría desenchufado) y los otros vacíos, reloj fijo (`EnableCustomRTC`, el mismo `--rtc` que el runner), video por software sin ventana (la referencia de las imágenes y de los vértices, D-041 y D-043), sin audio y sin límite de velocidad. Desde la etapa C3, además, con la lectura del EFB por el CPU y la caja envolvente prendidas (`EFBAccessEnable` y `BBoxEnable` en el `GFX.ini` del usuario: Dolphin las apaga por omisión para ir más rápido, el hardware las tiene; con `-C` no se aplican). Las referencias de los otros DOLs no cambiaron con eso. El `.map` del DOL va a `Maps/<prueba>.map` del usuario de Dolphin, así Dolphin engancha los mismos `OSReport` (ganchos al inicio: no cambian el estado).
+`comparar.py` arranca Dolphin igual que el runner arranca la GameCube (D-032, D-036): intérprete, sin hilo de CPU aparte, IPL salteado, DSP HLE, región NTSC-U e inglés (sin esto Dolphin toma el país del sistema, y sin país usa PAL), sin tarjetas de memoria, mando estándar en el puerto 1 siempre conectado (`GCPadNew.ini` con `Always Connected`; sin dispositivos de entrada figuraría desenchufado) y los otros vacíos, reloj fijo (`EnableCustomRTC`, el mismo `--rtc` que el runner), video por software sin ventana (la referencia de las imágenes y de los vértices, D-041 y D-043), sin audio y sin límite de velocidad. Desde la etapa C3, además, con la lectura del EFB por el CPU y la caja envolvente prendidas (`EFBAccessEnable` y `BBoxEnable` en el `GFX.ini` del usuario: Dolphin las apaga por omisión para ir más rápido, el hardware las tiene; con `-C` no se aplican). Las referencias de los otros DOLs no cambiaron con eso. Desde C6, además, con el filtro vertical de la copia al XFB (`DisableCopyFilter = False` en `[Enhancements]`: Dolphin lo apaga por omisión como mejora); tampoco cambió ninguna referencia. El `.map` del DOL va a `Maps/<prueba>.map` del usuario de Dolphin, así Dolphin engancha los mismos `OSReport` (ganchos al inicio: no cambian el estado).
 
 ## Resultado (2026-10-23; `gx_fifo`, `gx_tri` y `gx_raster` el 2026-10-24)
 
-Los 11 DOLs dan el mismo estado que Dolphin antes de cada instrucción, el mismo estado de GX y el mismo EFB al final y, los que dibujan, los mismos vértices, triángulos y copias:
+Los 12 DOLs dan el mismo estado que Dolphin antes de cada instrucción, el mismo estado de GX y el mismo EFB al final y, los que dibujan, los mismos vértices, triángulos y copias:
 
 | DOL | Instrucciones comparadas | Qué cubre |
 | --- | --- | --- |
@@ -109,6 +109,7 @@ Los 11 DOLs dan el mismo estado que Dolphin antes de cada instrucción, el mismo
 | `gx_tri` | 136 905 (completo), el estado de GX, 374 vértices y 254 triángulos | Vértices, luces y coordenadas de textura (Fase 2, etapa B) |
 | `gx_raster` | 252 690 (completo), el estado de GX, 1 649 vértices, 878 triángulos y 44 copias con el CRC del EFB | Recorte, culling, líneas y puntos (Fase 2, etapa C2); relleno, tijera, Z, mezcla, formatos, prueba de alfa, TEV, lectura del EFB y caja envolvente (C3) |
 | `gx_tex` | 611 772 (completo), el estado de GX, 416 vértices, 210 triángulos y 17 copias con el CRC del EFB | Texturas: los 11 formatos y las 3 paletas, envolturas, filtros, mipmaps, TMEM (Fase 2, etapa C4) |
+| `gx_copy` | 32 203 927 (completo), el estado de GX, 696 vértices, 240 triángulos y 183 copias con el CRC del EFB y de la RAM | Copias del EFB a textura y al XFB, y la imagen en pantalla (Fase 2, etapa C6) |
 | `gx_tev` | 2 565 809 (completo), el estado de GX, 2 180 vértices, 802 triángulos y 447 copias con el CRC del EFB | El TEV: 320 configuraciones al azar, indirectas, textura de Z, niebla, prueba de alfa, comparaciones (Fase 2, etapa C5) |
 
 Lo que hubo que cambiar para llegar ahí:
@@ -130,7 +131,7 @@ Los dos errores del intérprete de Dolphin valen también para Dolphin sin parch
 
 ```bash
 make dolphin                 # una vez por sesión (~1 h con 2 núcleos)
-make dolphin-ref             # compara los 11 DOLs y regenera tests/dol/dolphin
+make dolphin-ref             # compara los 12 DOLs y regenera tests/dol/dolphin
 python3 tools/dolphin-trace/comparar.py tests/dol/bin/hw.dol          # uno solo
 python3 tools/trace_diff.py build/dolphin/trazas/hw.runner.huella build/dolphin/trazas/hw.dolphin.huella
 ```

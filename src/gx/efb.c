@@ -75,7 +75,7 @@ static void set_alpha_only(uint32_t *p, uint32_t pf, uint32_t a)
 
 void gx_efb_set_color(gx_efb_t *e, const gx_efb_write_t *w, uint32_t x, uint32_t y, uint32_t rgba)
 {
-    uint32_t *p = &e->color[at(x, y)];
+    uint32_t *p = &GX_EFB_COLOR(e)[at(x, y)];
     if (w->color_update) {
         if (w->alpha_update)
             set_alpha_color(p, w->pf, rgba);
@@ -89,12 +89,12 @@ void gx_efb_set_color(gx_efb_t *e, const gx_efb_write_t *w, uint32_t x, uint32_t
 void gx_efb_set_depth(gx_efb_t *e, const gx_efb_write_t *w, uint32_t x, uint32_t y, uint32_t z)
 {
     if (w->z_update && w->pf <= GX_PF_Z24)
-        e->depth[at(x, y)] = z & 0xFFFFFFu;
+        GX_EFB_DEPTH(e)[at(x, y)] = z & 0xFFFFFFu;
 }
 
 uint32_t gx_efb_get_color(const gx_efb_t *e, uint32_t pf, uint32_t x, uint32_t y)
 {
-    const uint32_t s = e->color[at(x, y)];
+    const uint32_t s = GX_EFB_COLOR(e)[at(x, y)];
     switch (pf) {
     case GX_PF_RGB8_Z24:
     case GX_PF_Z24:
@@ -110,7 +110,7 @@ uint32_t gx_efb_get_color(const gx_efb_t *e, uint32_t pf, uint32_t x, uint32_t y
 
 uint32_t gx_efb_get_depth(const gx_efb_t *e, uint32_t pf, uint32_t x, uint32_t y)
 {
-    return pf <= GX_PF_Z24 ? e->depth[at(x, y)] : 0;
+    return pf <= GX_PF_Z24 ? GX_EFB_DEPTH(e)[at(x, y)] : 0;
 }
 
 /* ---- Z y mezcla (SWEfbInterface.cpp) ------------------------------------------------ */
@@ -136,7 +136,7 @@ int gx_efb_zcompare(gx_efb_t *e, const uint32_t *bp, uint32_t x, uint32_t y, uin
     default: pass = 1; break;
     }
     if (pass && bits(zmode, 4, 1) && pf <= GX_PF_Z24)
-        e->depth[at(x, y)] = z & 0xFFFFFFu;
+        GX_EFB_DEPTH(e)[at(x, y)] = z & 0xFFFFFFu;
     return pass;
 }
 
@@ -251,7 +251,7 @@ void gx_efb_blend(gx_efb_t *e, const uint32_t *bp, uint32_t x, uint32_t y, uint3
 void gx_efb_crc(const gx_efb_t *e, int x0, int y0, int x1, int y1, uint32_t *color, uint32_t *depth)
 {
     for (int d = 0; d < 2; d++) {
-        const uint32_t *plane = d ? e->depth : e->color;
+        const uint32_t *plane = d ? GX_EFB_DEPTH(e) : GX_EFB_COLOR(e);
         uint32_t crc = 0;
         for (int y = y0; y < y1; y++) {
             uint8_t row[GX_EFB_WIDTH * 3];

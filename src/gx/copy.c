@@ -31,11 +31,20 @@
  *     video por software borra todo el rectángulo pedido con el color y la Z de
  *     BP 0x4F-0x51, a través de las máscaras de escritura.
  *
+ * Lo que va a la RAM pasa por el búfer intermedio de Dolphin (TextureCacheBase
+ * con el video por software, que copia en el momento): el codificador escribe
+ * las filas de bloques cada "paso" (BP 0x4D) y después se copian a la RAM
+ * min(bytes por fila, paso) bytes de cada fila. Si el paso no alcanza para una
+ * fila, la imagen sale mezclada, como en Dolphin; si en la copia al XFB se leen
+ * más filas de las que se escribieron, sale lo que dejó una copia anterior.
+ *
  * Con copy_cb, una línea por copia como la del parche de Dolphin
  * (GCPS3_COPIAS): formato de píxel, BP 0x52, rectángulo, destino, CRC del EFB
  * (después de copiar y antes de borrar) y de los bytes que quedaron en la RAM.
  */
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "core/crc32.h"
 #include "core/log.h"
@@ -43,6 +52,7 @@
 #include "gx/efb.h"
 #include "gx/gx.h"
 #include "gx/raster.h"
+#include "gx/texenc.h"
 #include "gx/x86.h"
 
 #define LOG_MAX 16
@@ -50,7 +60,8 @@
 enum {
     BP_ZMODE = 0x40, BP_BLENDMODE = 0x41, BP_ZCONTROL = 0x43, BP_COPY_SRC_XY = 0x49,
     BP_COPY_SRC_WH = 0x4A, BP_COPY_DST = 0x4B, BP_COPY_STRIDE = 0x4D, BP_COPY_YSCALE = 0x4E,
-    BP_CLEAR_AR = 0x4F, BP_CLEAR_GB = 0x50, BP_CLEAR_Z = 0x51, BP_COPY = 0x52,
+    BP_CLEAR_AR = 0x4F, BP_CLEAR_GB = 0x50, BP_CLEAR_Z = 0x51, BP_COPY = 0x52, BP_COPY_FILTER0 = 0x53,
+    BP_COPY_FILTER1 = 0x54,
 };
 
 /* Formatos de textura (TextureDecoder.h) */
@@ -155,6 +166,91 @@ static void clear(gc_gx_t *gx)
         }
 }
 
+/* ---- a la RAM ------------------------------------------------------------------------ */
+
+/* El búfer intermedio con al menos n bytes (lo nuevo en 0, como el de Dolphin
+ * al crearse); más que el de Dolphin no: ahí Dolphin escribe fuera */
+static uint8_t *staging(gc_gx_t *gx, uint32_t n)
+{
+    if (n > GX_STAGING_MAX)
+        return NULL;
+    if (n > gx->staging_size) {
+        uint8_t *p = realloc(gx->staging, n);
+        if (!p)
+            return NULL;
+        memset(p + gx->staging_size, 0, n - gx->staging_size);
+        gx->staging = p;
+        gx->staging_size = n;
+    }
+    return gx->staging;
+}
+
+/* AbstractStagingTexture::ReadTexels: min(bytes por fila, paso) de cada fila */
+static void staging_to_ram(gc_gx_t *gx, uint8_t *ram, uint32_t stride, uint32_t bytes_per_row, uint32_t rows)
+{
+    const uint32_t n = bytes_per_row < stride ? bytes_per_row : stride;
+    for (uint32_t k = 0; k < rows; k++)
+        memcpy(ram + k * stride, gx->staging + k * stride, n);
+}
+
+static uint32_t max_u32(uint32_t a, uint32_t b)
+{
+    return a > b ? a : b;
+}
+
+static void texture_copy(gc_gx_t *gx, uint32_t trig, int l, int t, uint8_t *ram, uint32_t stride,
+                         uint32_t bytes_per_row, uint32_t rows)
+{
+    const uint32_t pf = bits(gx->bp[BP_ZCONTROL], 0, 3);
+    const uint32_t tp = bits(trig, 3, 4), wh = gx->bp[BP_COPY_SRC_WH];
+    gx_texenc_t c;
+    c.efb_fmt = pf;
+    c.copy_fmt = tp / 2 + (tp & 1u) * 8;
+    c.intensity = bits(trig, 15, 1) && bits(trig, 16, 1);
+    c.half = (int)bits(trig, 9, 1);
+    c.wm1 = bits(wh, 0, 10);
+    c.hm1 = bits(wh, 10, 10);
+    c.stride = stride;
+    const uint32_t first = (pf == GX_PF_Z24 ? GX_EFB_PIXELS : 0) + (uint32_t)t * GX_EFB_WIDTH + (uint32_t)l;
+    const gx_pixels_t src = { gx->efb->px + first, 2 * GX_EFB_PIXELS - first };
+    const uint32_t read = rows ? (rows - 1) * stride + (bytes_per_row < stride ? bytes_per_row : stride) : 0;
+    if (!staging(gx, max_u32(gx_texenc_extent(&c), read))) {
+        if (gx->warnings++ < LOG_MAX)
+            GC_LOGW("gx: copia del EFB demasiado grande (paso %u, %u filas)", (unsigned)stride, (unsigned)rows);
+        return;
+    }
+    gx_texenc(gx->staging, src, &c);
+    staging_to_ram(gx, ram, stride, bytes_per_row, rows);
+}
+
+static void xfb_copy(gc_gx_t *gx, uint32_t trig, int l, int t, int r, int b, float scale, uint8_t *ram,
+                     uint32_t stride, uint32_t bytes_per_row, uint32_t rows)
+{
+    const uint32_t f0 = gx->bp[BP_COPY_FILTER0], f1 = gx->bp[BP_COPY_FILTER1];
+    gx_xfbenc_t c;
+    c.pf = bits(gx->bp[BP_ZCONTROL], 0, 3);
+    c.left = (uint32_t)l;
+    c.top = (uint32_t)t;
+    c.right = (uint32_t)r;
+    c.bottom = (uint32_t)b;
+    c.clamp_top = (int)bits(trig, 0, 1);
+    c.clamp_bottom = (int)bits(trig, 1, 1);
+    for (int k = 0; k < 4; k++)
+        c.coef[k] = (uint8_t)bits(f0, 6u * (unsigned)k, 6);
+    for (int k = 0; k < 3; k++)
+        c.coef[4 + k] = (uint8_t)bits(f1, 6u * (unsigned)k, 6);
+    c.gamma = bits(trig, 7, 2);
+    c.y_scale = scale;
+    const uint32_t read = rows ? (rows - 1) * stride + (bytes_per_row < stride ? bytes_per_row : stride) : 0;
+    if (!staging(gx, max_u32(gx_xfbenc_size(&c), read))) {
+        if (gx->warnings++ < LOG_MAX)
+            GC_LOGW("gx: copia al XFB demasiado grande (paso %u, %u filas)", (unsigned)stride, (unsigned)rows);
+        return;
+    }
+    gx_xfbenc(gx->staging, gx->xfb_source, GX_EFB_COLOR(gx->efb), &c);
+    staging_to_ram(gx, ram, stride, bytes_per_row, rows);
+}
+
 void gc_gx_efb_copy(gc_gx_t *gx)
 {
     const uint32_t trig = gx->bp[BP_COPY];
@@ -185,19 +281,28 @@ void gc_gx_efb_copy(gc_gx_t *gx)
     uint32_t bytes_per_row = 0, rows = 0;
     if (stride != 0) {
         const uint32_t w = (uint32_t)(r - raw_l), h = (uint32_t)(b - raw_t);
-        if (!bits(trig, 14, 1)) {                   /* a textura */
+        const int to_xfb = (int)bits(trig, 14, 1);
+        float scale = 1.0f;
+        if (!to_xfb) {                              /* a textura */
             const uint32_t tp = bits(trig, 3, 4);
             copy_size(tp / 2 + (tp & 1u) * 8, (int)bits(trig, 9, 1), w, h, &bytes_per_row, &rows);
         } else {                                    /* al XFB: apaga la caja envolvente */
             gx->bbox.active = 0;
             const uint32_t ys = gx->bp[BP_COPY_YSCALE];
-            const float scale = bits(trig, 10, 1) ? 256.0f / (float)ys : (float)ys / 256.0f;
+            scale = bits(trig, 10, 1) ? 256.0f / (float)ys : (float)ys / 256.0f;
             const float lines = 1.0f + (float)bits(wh, 10, 10) * scale;
             copy_size(EFB_COPY_XFB, 0, w, gx_x86_f2u(lines), &bytes_per_row, &rows);
         }
-        /* La conversión a la RAM llega en el paso C6 */
-        if (gx->warnings++ < LOG_MAX)
-            GC_LOGW("gx: copia del EFB a 0x%08x todavia sin escribir en la RAM", (unsigned)dest);
+        /* GetPointerForRange: fuera de la RAM no se copia nada */
+        uint8_t *ram = gc_ram_phys(&gx->sys->mem, dest, rows * stride);
+        if (!ram) {
+            if (gx->warnings++ < LOG_MAX)
+                GC_LOGW("gx: copia del EFB a 0x%08x fuera de la RAM", (unsigned)dest);
+        } else if (!to_xfb) {
+            texture_copy(gx, trig, raw_l, raw_t, ram, stride, bytes_per_row, rows);
+        } else {
+            xfb_copy(gx, trig, raw_l, raw_t, r, b, scale, ram, stride, bytes_per_row, rows);
+        }
     }
 
     if (gx->copy_cb) {

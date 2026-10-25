@@ -28,6 +28,8 @@
  *   RGB565_Z16       como RGB8 (Dolphin todavía no lo emula aparte)
  *
  * Los colores van como 0xRRGGBBAA (el u8[4] "abgr" de Dolphin leído en x86).
+ * El color y la Z están de corrido, en ese orden, como efb[] de Dolphin: las
+ * copias a textura leen los bloques de relleno pasando de un plano al otro.
  */
 #ifndef GCPS3_GX_EFB_H
 #define GCPS3_GX_EFB_H
@@ -36,6 +38,7 @@
 
 #define GX_EFB_WIDTH  640
 #define GX_EFB_HEIGHT 528
+#define GX_EFB_PIXELS (GX_EFB_WIDTH * GX_EFB_HEIGHT)
 
 enum {
     GX_PF_RGB8_Z24 = 0, GX_PF_RGBA6_Z24 = 1, GX_PF_RGB565_Z16 = 2, GX_PF_Z24 = 3,
@@ -43,9 +46,11 @@ enum {
 };
 
 typedef struct gx_efb {
-    uint32_t color[GX_EFB_WIDTH * GX_EFB_HEIGHT];   /* 24 bits por píxel */
-    uint32_t depth[GX_EFB_WIDTH * GX_EFB_HEIGHT];
+    uint32_t px[2 * GX_EFB_PIXELS];     /* 24 bits por píxel: el color y después la Z */
 } gx_efb_t;
+
+#define GX_EFB_COLOR(e) ((e)->px)
+#define GX_EFB_DEPTH(e) ((e)->px + GX_EFB_PIXELS)
 
 /* Lo que se escribe: la máscara de BP 0x41 (color y alfa) y de 0x40 (Z) */
 typedef struct gx_efb_write {

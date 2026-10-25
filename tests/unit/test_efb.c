@@ -74,27 +74,27 @@ static void test_efb_formats(void)
     memset(&e, 0, sizeof e);
     gx_efb_write_t w = { GX_PF_RGB8_Z24, 1, 1, 1 };
     gx_efb_set_color(&e, &w, 3, 4, 0x12345678u);
-    CHECK_EQ_U64(e.color[3 + 4 * GX_EFB_WIDTH], 0x123456u);
+    CHECK_EQ_U64(e.px[3 + 4 * GX_EFB_WIDTH], 0x123456u);
     CHECK_EQ_U64(gx_efb_get_color(&e, GX_PF_RGB8_Z24, 3, 4), 0x123456FFu);
 
     /* RGBA6: 6 bits por canal; al leer, 6 a 8 replicando los de arriba */
     w.pf = GX_PF_RGBA6_Z24;
     gx_efb_set_color(&e, &w, 0, 0, 0xFF8040C4u);
-    CHECK_EQ_U64(e.color[0], 0x3F << 18 | 0x20 << 12 | 0x10 << 6 | 0x31);
+    CHECK_EQ_U64(e.px[0], 0x3F << 18 | 0x20 << 12 | 0x10 << 6 | 0x31);
     CHECK_EQ_U64(gx_efb_get_color(&e, GX_PF_RGBA6_Z24, 0, 0), 0xFF8241C7u);
     /* Solo el color: el alfa queda */
     w.alpha_update = 0;
     gx_efb_set_color(&e, &w, 0, 0, 0x00000000u);
-    CHECK_EQ_U64(e.color[0], 0x31u);
+    CHECK_EQ_U64(e.px[0], 0x31u);
     /* Solo el alfa */
     w.color_update = 0;
     w.alpha_update = 1;
     gx_efb_set_color(&e, &w, 0, 0, 0xFFFFFF40u);
-    CHECK_EQ_U64(e.color[0], 0x10u);
+    CHECK_EQ_U64(e.px[0], 0x10u);
     /* En RGB8 el alfa no se escribe */
     w.pf = GX_PF_RGB8_Z24;
     gx_efb_set_color(&e, &w, 3, 4, 0x000000FFu);
-    CHECK_EQ_U64(e.color[3 + 4 * GX_EFB_WIDTH], 0x123456u);
+    CHECK_EQ_U64(e.px[3 + 4 * GX_EFB_WIDTH], 0x123456u);
 
     /* Z de 24 bits, solo con la máscara; los formatos YUV no tienen */
     w.z_update = 1;
