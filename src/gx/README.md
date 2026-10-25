@@ -89,7 +89,7 @@ Listo para SPU quiere decir búfer a búfer, sin estado global ni punteros a la 
 
 ## Pruebas
 
-`tests/unit/test_gx.c` (19 pruebas), `test_vtx.c` (10), `test_xform.c` (12), `test_prim.c` (6), `test_efb.c` (5), `test_setup.c` (5), `test_raster.c` (8), `test_tex.c` (6) y `test_copy.c` (7), y los DOLs `gx_fifo`, `gx_tri`, `gx_raster`, `gx_tex`, `gx_tev` y `gx_copy` ([tests/dol](../../tests/dol/README.md)), iguales a Dolphin instrucción por instrucción, con el mismo estado de GX y EFB al final y los mismos vértices, triángulos y copias bit a bit ([docs/traza-dolphin.md](../../docs/traza-dolphin.md)).
+`tests/unit/test_gx.c` (19 pruebas), `test_vtx.c` (10), `test_xform.c` (12), `test_prim.c` (6), `test_efb.c` (5), `test_setup.c` (5), `test_raster.c` (8), `test_tex.c` (6) y `test_copy.c` (7), y los DOLs `gx_fifo`, `gx_tri`, `gx_raster`, `gx_tex`, `gx_tev`, `gx_copy` y `gx_escena` ([tests/dol](../../tests/dol/README.md)), iguales a Dolphin instrucción por instrucción, con el mismo estado de GX y EFB al final y los mismos vértices, triángulos y copias bit a bit ([docs/traza-dolphin.md](../../docs/traza-dolphin.md)).
 
 ## Del triángulo al píxel (etapa C3)
 
@@ -137,5 +137,9 @@ Sin caché, como Dolphin por software: cada texel se lee de la RAM (desde la dir
 | A la RAM | Por el búfer intermedio de Dolphin (crece hasta lo que se pide, como mucho sus 10 MB, y queda entre copias): las filas de bloques cada "paso" y después min(bytes por fila, paso) de cada fila a la RAM; fuera de la RAM no se copia nada |
 
 `tools/gamma/tabla.c` genera la tabla de la gamma con `powf` de glibc, como la calcula Dolphin.
+
+## Tiempo por cuadro (etapa C7)
+
+Con `clock_us` (lo pone la plataforma), GX suma en `busy_us` el tiempo de leer el FIFO, dibujar y copiar, y cuenta las copias al XFB. El runner lo imprime al terminar (`runner: GX ... ms por cuadro dibujado`) y la app al terminar cada DOL. En la PC de la nube, con el runner en `-O2` y sin sanitizers, `gx_escena` tarda unos 73 ms por cuadro: el rasterizador de referencia no es para jugar, y en el PPU va a ser más lento (la medición en consola está pendiente en [docs/perf-log.md](../../docs/perf-log.md)).
 
 Las conversiones de float a entero siguen a x86-64 (`x86.h`) y la aritmética entera que en Dolphin puede desbordar se hace con la vuelta de 32 bits. Lo que en Dolphin escribe fuera de sus arreglos (más de 2 canales, 8 coordenadas o 4 etapas indirectas en genMode) se recorta a esos máximos.

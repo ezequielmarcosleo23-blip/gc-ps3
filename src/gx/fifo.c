@@ -73,6 +73,8 @@ int32_t gc_gx_run_gpu_on_cpu(gc_gx_t *gx, int32_t ticks)
     gc_cp_t *cp = &gx->sys->cp;
     gc_cp_fifo_t *f = &cp->fifo;
     int32_t available = ticks + gx->sync_ticks;
+    const int timed = gx->clock_us && f->read_enable && f->distance;
+    const uint64_t t0 = timed ? gx->clock_us() : 0;
 
     while (f->read_enable && f->distance && !gc_cp_at_breakpoint(cp) && available >= 0) {
         read_block(gx, f->rptr);
@@ -88,6 +90,8 @@ int32_t gc_gx_run_gpu_on_cpu(gc_gx_t *gx, int32_t ticks)
     }
 
     gc_cp_status_from_gpu(cp);
+    if (timed)
+        gx->busy_us += gx->clock_us() - t0;
 
     /* Lo que sobró no se guarda; la deuda sí */
     gx->sync_ticks = available < 0 ? available : 0;
@@ -138,6 +142,8 @@ void gc_gx_reset(gc_gx_t *gx)
     memset(&gx->cp, 0, sizeof gx->cp);
     memset(gx->xf, 0, sizeof gx->xf);
     gx->commands = gx->primitives = gx->vertices = gx->display_lists = 0;
+    gx->busy_us = 0;
+    gx->xfb_copies = 0;
     gx->unknown = gx->warnings = 0;
     gc_gx_vtx_reset(gx);
     if (gx->efb)

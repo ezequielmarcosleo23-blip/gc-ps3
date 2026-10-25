@@ -256,6 +256,12 @@ static int parse_u64(const char *s, uint64_t *out)
 }
 
 /* --cuadros: el mismo formato que la app de PS3 (con "app:" en vez de "runner:") */
+/* µs de procesador de la PC para el tiempo de GX (clock(), como el total) */
+static uint64_t host_clock_us(void)
+{
+    return (uint64_t)((double)clock() * 1e6 / CLOCKS_PER_SEC);
+}
+
 static gc_frames_t frames;
 static uint8_t frame_rgb[720 * 576 * 3];
 
@@ -452,6 +458,7 @@ int main(int argc, char **argv)
         free(data);
         return 1;
     }
+    sys.gx.clock_us = host_clock_us;
     const gc_dol_error_t err = gc_system_boot_dol(&sys, data, len, &cfg);
     free(data);
     if (err != GC_DOL_OK) {
@@ -550,6 +557,12 @@ int main(int argc, char **argv)
     fprintf(stderr, "runner: %llu ciclos en %.2f s (%.1f MIPS), pc = 0x%08x, %u instrucciones ilegales\n",
             (unsigned long long)ran, secs, secs > 0 ? (double)ran / secs / 1e6 : 0.0,
             (unsigned)sys.cpu.pc, (unsigned)sys.cpu.illegal);
+    if (sys.gx.xfb_copies)
+        fprintf(stderr, "runner: GX %.1f ms, %u copias al XFB: %.2f ms por cuadro dibujado\n",
+                (double)sys.gx.busy_us / 1000.0, (unsigned)sys.gx.xfb_copies,
+                (double)sys.gx.busy_us / 1000.0 / (double)sys.gx.xfb_copies);
+    else
+        fprintf(stderr, "runner: GX %.1f ms\n", (double)sys.gx.busy_us / 1000.0);
     if (sys.vi.last.xfb)
         fprintf(stderr, "runner: %llu campos de video, el ultimo de %ux%u con el XFB en 0x%08x\n",
                 (unsigned long long)sys.vi.fields, (unsigned)sys.vi.last.width,

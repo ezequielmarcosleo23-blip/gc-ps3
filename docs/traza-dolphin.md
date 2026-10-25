@@ -95,7 +95,7 @@ Cada float va con sus 8 dígitos hexadecimales, y un NaN siempre como `7fc00000`
 
 ## Resultado (2026-10-23; `gx_fifo`, `gx_tri` y `gx_raster` el 2026-10-24)
 
-Los 12 DOLs dan el mismo estado que Dolphin antes de cada instrucción, el mismo estado de GX y el mismo EFB al final y, los que dibujan, los mismos vértices, triángulos y copias:
+Los 13 DOLs dan el mismo estado que Dolphin antes de cada instrucción, el mismo estado de GX y el mismo EFB al final y, los que dibujan, los mismos vértices, triángulos y copias:
 
 | DOL | Instrucciones comparadas | Qué cubre |
 | --- | --- | --- |
@@ -110,6 +110,7 @@ Los 12 DOLs dan el mismo estado que Dolphin antes de cada instrucción, el mismo
 | `gx_raster` | 252 690 (completo), el estado de GX, 1 649 vértices, 878 triángulos y 44 copias con el CRC del EFB | Recorte, culling, líneas y puntos (Fase 2, etapa C2); relleno, tijera, Z, mezcla, formatos, prueba de alfa, TEV, lectura del EFB y caja envolvente (C3) |
 | `gx_tex` | 611 772 (completo), el estado de GX, 416 vértices, 210 triángulos y 17 copias con el CRC del EFB | Texturas: los 11 formatos y las 3 paletas, envolturas, filtros, mipmaps, TMEM (Fase 2, etapa C4) |
 | `gx_copy` | 32 203 927 (completo), el estado de GX, 696 vértices, 240 triángulos y 183 copias con el CRC del EFB y de la RAM | Copias del EFB a textura y al XFB, y la imagen en pantalla (Fase 2, etapa C6) |
+| `gx_escena` | 129 423 913 (completo), el estado de GX, 640 vértices, 325 triángulos y 10 copias con el CRC del EFB y de la RAM | Una escena con luces, texturas con mipmaps, niebla, agua indirecta, un espejo por copia a textura y transparencias, en 4 cuadros que muestra la VI (Fase 2, etapa C7) |
 | `gx_tev` | 2 565 809 (completo), el estado de GX, 2 180 vértices, 802 triángulos y 447 copias con el CRC del EFB | El TEV: 320 configuraciones al azar, indirectas, textura de Z, niebla, prueba de alfa, comparaciones (Fase 2, etapa C5) |
 
 Lo que hubo que cambiar para llegar ahí:
@@ -131,7 +132,7 @@ Los dos errores del intérprete de Dolphin valen también para Dolphin sin parch
 
 ```bash
 make dolphin                 # una vez por sesión (~1 h con 2 núcleos)
-make dolphin-ref             # compara los 12 DOLs y regenera tests/dol/dolphin
+make dolphin-ref             # compara los 13 DOLs y regenera tests/dol/dolphin
 python3 tools/dolphin-trace/comparar.py tests/dol/bin/hw.dol          # uno solo
 python3 tools/trace_diff.py build/dolphin/trazas/hw.runner.huella build/dolphin/trazas/hw.dolphin.huella
 ```

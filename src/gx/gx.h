@@ -164,6 +164,13 @@ typedef struct gc_gx {
     gx_efb_t *efb;
     /* Cada copia del EFB en texto (el volcado de Dolphin, GCPS3_COPIAS) */
     void    (*copy_cb)(void *ctx, const char *line);
+
+    /* Tiempo por cuadro (paso C7): con clock_us (µs de la máquina, lo pone la
+     * plataforma), lo que tardó GX en leer el FIFO, dibujar y copiar, y las
+     * copias al XFB (un cuadro dibujado cada una) */
+    uint64_t (*clock_us)(void);
+    uint64_t  busy_us;
+    uint32_t  xfb_copies;
     void     *copy_ctx;
 } gc_gx_t;
 

@@ -234,6 +234,11 @@ static void stop(app_t *a)
     LOGI("app: fin de %s, %llu ciclos, %llu campos, %u cuadros distintos", a->name,
          (unsigned long long)a->cycles, (unsigned long long)sys.vi.fields,
          (unsigned)a->frames.last.number);
+    /* El tiempo de GX (en RPCS3 no vale como medida: depende de la PC) */
+    if (sys.gx.xfb_copies)
+        LOGI("app: GX de %s: %llu us, %u copias al XFB, %llu us por cuadro dibujado", a->name,
+             (unsigned long long)sys.gx.busy_us, (unsigned)sys.gx.xfb_copies,
+             (unsigned long long)(sys.gx.busy_us / sys.gx.xfb_copies));
     a->running = 0;
 }
 
@@ -395,6 +400,7 @@ int main(int argc, char **argv)
         return 1;
     }
     gc_frames_attach(&a->frames, &sys, a->rgb, FRAME_MAX_W * FRAME_MAX_H * 3, frame_seen, a);
+    sys.gx.clock_us = udplog_clock_us;
     scan(a, argc > 0 ? argv[0] : NULL);
 
     const rsxkit_view view = { RSXKIT_SCALE_FIT, RSXKIT_FILTER_LINEAR, 4.0f / 3.0f };

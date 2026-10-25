@@ -51,6 +51,7 @@ void udplog_shutdown(void);
 uint32_t udplog_sent(void);          /* líneas enviadas */
 uint32_t udplog_send_errors(void);   /* sendto fallidos (un destino puede fallar y otro no) */
 uint64_t udplog_now_us(void);        /* µs desde udplog_init (timebase del PPU) */
+uint64_t udplog_clock_us(void);      /* lo mismo, para medir (en la app simulada, otro reloj) */
 const char *udplog_targets(void);    /* destinos en texto, para el log */
 
 /* Destino del log del núcleo (core/log.h): gc_log_set_sink(udplog_core_sink). */

@@ -302,6 +302,7 @@ void gc_gx_efb_copy(gc_gx_t *gx)
             texture_copy(gx, trig, raw_l, raw_t, ram, stride, bytes_per_row, rows);
         } else {
             xfb_copy(gx, trig, raw_l, raw_t, r, b, scale, ram, stride, bytes_per_row, rows);
+            gx->xfb_copies++;
         }
     }
 

@@ -216,6 +216,7 @@ static void test_gx_raster(void) { CHECK(run_program("gx_raster", MAX_CYCLES, EX
 static void test_gx_tex(void) { CHECK(run_program("gx_tex", MAX_CYCLES, EXITS)); }
 static void test_gx_tev(void) { CHECK(run_program("gx_tev", MAX_CYCLES, EXITS)); }
 static void test_gx_copy(void) { CHECK(run_program("gx_copy", MAX_CYCLES, EXITS)); }
+static void test_gx_escena(void) { CHECK(run_program("gx_escena", MAX_CYCLES, EXITS)); }
 
 const test_case_t program_tests[] = {
     { "dol hola: OSReport, printf con pila y va_list, puts (= salida en la PC)", test_hola },
@@ -230,5 +231,6 @@ const test_case_t program_tests[] = {
     { "dol gx_tex: formatos, paletas, envolturas, filtros, mipmaps y TMEM", test_gx_tex },
     { "dol gx_tev: combinadores al azar, indirectas, textura de Z, niebla y prueba de alfa", test_gx_tev },
     { "dol gx_copy: copias a textura y al XFB, y la imagen en pantalla", test_gx_copy },
+    { "dol gx_escena: una escena con luces, texturas, niebla, agua, espejo y transparencias", test_gx_escena },
     { NULL, NULL },
 };

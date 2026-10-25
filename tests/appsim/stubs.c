@@ -430,5 +430,8 @@ void udplog_shutdown(void)
 }
 
 uint64_t udplog_now_us(void) { return clock_us += 1000; }
+/* El de medir GX: otro, para no cambiar cuánto corre cada cuadro; 1 µs por llamada */
+static uint64_t measure_us;
+uint64_t udplog_clock_us(void) { return ++measure_us; }
 
 const char *udplog_targets(void) { return "(simulado en la PC)"; }

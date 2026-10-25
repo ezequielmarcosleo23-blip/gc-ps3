@@ -75,6 +75,11 @@ uint64_t udplog_now_us(void)
     return (ticks / lg.tb_freq) * 1000000ull + (ticks % lg.tb_freq) * 1000000ull / lg.tb_freq;
 }
 
+uint64_t udplog_clock_us(void)
+{
+    return udplog_now_us();
+}
+
 static void add_target(uint32_t ip_host_order, uint16_t port)
 {
     if (lg.ntargets >= MAX_TARGETS)

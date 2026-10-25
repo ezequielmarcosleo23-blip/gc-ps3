@@ -1,0 +1,7 @@
+gx_escena: una escena
+gx_escena: estado inicial
+gx_escena: cuadro 1
+gx_escena: cuadro 2
+gx_escena: cuadro 3
+gx_escena: cuadro 4
+gx_escena: 5 tokens; OK
