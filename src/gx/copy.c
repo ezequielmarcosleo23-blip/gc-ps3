@@ -51,7 +51,6 @@
 #include "core/system.h"
 #include "gx/efb.h"
 #include "gx/gx.h"
-#include "gx/raster.h"
 #include "gx/texenc.h"
 #include "gx/x86.h"
 
@@ -140,30 +139,30 @@ static void log_line(gc_gx_t *gx, const char *text)
         gx->copy_cb(gx->copy_ctx, text);
 }
 
-/* EfbCopy::ClearEfb, a través de BPFunctions::ClearScreen */
+/* EfbCopy::ClearEfb, a través de BPFunctions::ClearScreen: qué se borra; lo
+ * borra el backend (backend.h) */
 static void clear(gc_gx_t *gx)
 {
-    gx_efb_write_t w = gc_gx_efb_write_mask(gx);
-    int alpha = w.alpha_update;
-    if (w.pf == GX_PF_RGB8_Z24 || w.pf == GX_PF_RGB565_Z16 || w.pf == GX_PF_Z24)
+    gx_clear_t c;
+    c.w = gc_gx_efb_write_mask(gx);
+    int alpha = c.w.alpha_update;
+    if (c.w.pf == GX_PF_RGB8_Z24 || c.w.pf == GX_PF_RGB565_Z16 || c.w.pf == GX_PF_Z24)
         alpha = 0;
-    if (!w.color_update && !alpha && !w.z_update)
-        return;
+    c.any = c.w.color_update || alpha || c.w.z_update;
 
     const uint32_t ar = gx->bp[BP_CLEAR_AR], gb = gx->bp[BP_CLEAR_GB];
-    const uint32_t color = (ar & 0xFFu) << 24 | (gb & 0xFFFFu) << 8 | (ar & 0xFF00u) >> 8;
+    c.color = (ar & 0xFFu) << 24 | (gb & 0xFFFFu) << 8 | (ar & 0xFF00u) >> 8;
+    c.z = gx->bp[BP_CLEAR_Z];
     const uint32_t xy = gx->bp[BP_COPY_SRC_XY], wh = gx->bp[BP_COPY_SRC_WH];
-    const uint32_t left = bits(xy, 0, 10), top = bits(xy, 10, 10);
-    uint32_t right = left + bits(wh, 0, 10), bottom = top + bits(wh, 10, 10);
-    if (right > GX_EFB_WIDTH - 1)
-        right = GX_EFB_WIDTH - 1;
-    if (bottom > GX_EFB_HEIGHT - 1)
-        bottom = GX_EFB_HEIGHT - 1;
-    for (uint32_t y = top; y <= bottom; y++)
-        for (uint32_t x = left; x <= right; x++) {
-            gx_efb_set_color(gx->efb, &w, x, y, color);
-            gx_efb_set_depth(gx->efb, &w, x, y, gx->bp[BP_CLEAR_Z]);
-        }
+    c.left = bits(xy, 0, 10);
+    c.top = bits(xy, 10, 10);
+    c.right = c.left + bits(wh, 0, 10);
+    c.bottom = c.top + bits(wh, 10, 10);
+    if (c.right > GX_EFB_WIDTH - 1)
+        c.right = GX_EFB_WIDTH - 1;
+    if (c.bottom > GX_EFB_HEIGHT - 1)
+        c.bottom = GX_EFB_HEIGHT - 1;
+    gx->be->clear(gx, &c);
 }
 
 /* ---- a la RAM ------------------------------------------------------------------------ */
@@ -253,6 +252,7 @@ static void xfb_copy(gc_gx_t *gx, uint32_t trig, int l, int t, int r, int b, flo
 
 void gc_gx_efb_copy(gc_gx_t *gx)
 {
+    gc_gx_efb_sync(gx);
     const uint32_t trig = gx->bp[BP_COPY];
     const uint32_t dest = gx->bp[BP_COPY_DST] << 5, stride = gx->bp[BP_COPY_STRIDE] << 5;
     const uint32_t xy = gx->bp[BP_COPY_SRC_XY], wh = gx->bp[BP_COPY_SRC_WH];
@@ -319,10 +319,8 @@ void gc_gx_efb_copy(gc_gx_t *gx)
         log_line(gx, line);
     }
 
-    if (bits(trig, 11, 1)) {
+    if (bits(trig, 11, 1))
         clear(gx);
-        gx_raster_scissor_changed(gx);              /* "Scissor rect must be restored" */
-    }
 }
 
 uint32_t gc_gx_efb_peek(gc_gx_t *gx, uint32_t phys)
@@ -332,6 +330,7 @@ uint32_t gc_gx_efb_peek(gc_gx_t *gx, uint32_t phys)
         return 0;                                   /* Z + color: Dolphin no lo emula */
     if (x >= GX_EFB_WIDTH || y >= GX_EFB_HEIGHT)
         return 0;
+    gc_gx_efb_sync(gx);
     const uint32_t pf = bits(gx->bp[BP_ZCONTROL], 0, 3);
     if (phys & 0x00400000u)
         return gx_efb_get_depth(gx->efb, pf, x, y);
@@ -348,6 +347,7 @@ void gc_gx_efb_final(gc_gx_t *gx)
 {
     char line[48];
     uint32_t c, z;
+    gc_gx_efb_sync(gx);
     gx_efb_crc(gx->efb, 0, 0, GX_EFB_WIDTH, GX_EFB_HEIGHT, &c, &z);
     snprintf(line, sizeof line, "efb %08x %08x", (unsigned)c, (unsigned)z);
     log_line(gx, line);

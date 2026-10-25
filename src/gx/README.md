@@ -2,7 +2,7 @@
 
 El lado de la GPU de la GameCube, portable: lee el FIFO de GX de la RAM, decodifica los comandos, guarda el estado de BP, CP y XF y carga y transforma los vértices de cada primitiva. Lo que la CPU ve de GX (gather pipe, registros del CP y del PE) está en [src/hw](../hw/README.md). Sigue a Dolphin (commit `cf5cb7ef`) con un solo hilo; lo portado lleva la atribución en el encabezado.
 
-Fase 2 ([docs/fase2.md](../../docs/fase2.md)): etapas A (FIFO y estado), B (vértices y XF) y, en curso, C (el renderizador por software de Dolphin: el armado, el recorte, el rasterizador, el TEV, las texturas, la mezcla con el EFB y la caja envolvente; falta la conversión de las copias a la RAM). El backend del RSX (`include/backend/gfx_backend.h`) llega en la D.
+Fase 2 ([docs/fase2.md](../../docs/fase2.md)): etapas A (FIFO y estado), B (vértices y XF) y C (el renderizador por software de Dolphin: el armado, el recorte, el rasterizador, el TEV, las texturas, la mezcla con el EFB, la caja envolvente y las copias a la RAM), completas; en curso, la D (dibujar con el RSX). Desde D1, lo que dibuja es un backend (`backend.h`): el rasterizador por software es el primero.
 
 | Archivo | Qué hace | En Dolphin |
 | --- | --- | --- |
@@ -15,8 +15,9 @@ Fase 2 ([docs/fase2.md](../../docs/fase2.md)): etapas A (FIFO y estado), B (vér
 | `prim.c` | Una primitiva: partes de 16 380, vértices descartados, los que usa, la caché de normales, la foto del XF, bloques de 64; el volcado en texto | `VertexLoaderManager.cpp`, `VertexManagerBase.cpp`, `IndexGenerator.cpp`, `SWVertexLoader.cpp` |
 | `vtx.h`, `vtx.c` | Cargador de vértices: juntar (PPU) y decodificar (listo para SPU) | `VertexLoaderX64.cpp`, `SWVertexLoader.cpp` |
 | `xform.h`, `xform.c` | El XF: posición, proyección, normales, color y alfa con 8 luces, coordenadas de textura (listo para SPU) | `VideoBackends/Software/TransformUnit.cpp` |
-| `raster.h`, `setup.c` | Armado de triángulos, líneas y puntos; recorte, culling, división por w y viewport | `IndexGenerator.cpp`, `VideoBackends/Software/SetupUnit.cpp`, `Clipper.cpp` |
-| `raster.c` | El rasterizador: rectángulos de tijera, aristas en 28.4, bloques de 2 × 2, pendientes, LOD, zfreeze, Z temprana; el volcado de triángulos | `VideoBackends/Software/Rasterizer.cpp`, `BPFunctions.cpp` |
+| `raster.h`, `setup.c` | Armado de triángulos, líneas y puntos; recorte, culling, división por w y viewport; el volcado de triángulos y la entrega al backend | `IndexGenerator.cpp`, `VideoBackends/Software/SetupUnit.cpp`, `Clipper.cpp` |
+| `backend.h`, `backend_sw.c` | La interfaz del backend (etapa D1) y los dos por software: en el acto y con lotes | |
+| `raster.c` | El rasterizador: rectángulos de tijera, aristas en 28.4, bloques de 2 × 2, pendientes, LOD, zfreeze, Z temprana | `VideoBackends/Software/Rasterizer.cpp`, `BPFunctions.cpp` |
 | `tev.h`, `tev.c` | El TEV: etapas indirectas, combinadores, constantes, swap, prueba de alfa, textura de Z, niebla, Z tardía | `VideoBackends/Software/Tev.cpp` |
 | `exp2.h`, `exp2.c` | El 2^x de la niebla en double-double: el mismo float que `pow` de glibc, igual en la PC y en el PPU | |
 | `efb.h`, `efb.c` | El EFB: 640 × 528 de color y Z en los formatos de píxel; prueba de Z, mezcla, resta, lógicas, alfa de destino, dither | `VideoBackends/Software/SWEfbInterface.cpp` |
@@ -89,7 +90,7 @@ Listo para SPU quiere decir búfer a búfer, sin estado global ni punteros a la 
 
 ## Pruebas
 
-`tests/unit/test_gx.c` (19 pruebas), `test_vtx.c` (10), `test_xform.c` (12), `test_prim.c` (6), `test_efb.c` (5), `test_setup.c` (5), `test_raster.c` (8), `test_tex.c` (6) y `test_copy.c` (7), y los DOLs `gx_fifo`, `gx_tri`, `gx_raster`, `gx_tex`, `gx_tev`, `gx_copy` y `gx_escena` ([tests/dol](../../tests/dol/README.md)), iguales a Dolphin instrucción por instrucción, con el mismo estado de GX y EFB al final y los mismos vértices, triángulos y copias bit a bit ([docs/traza-dolphin.md](../../docs/traza-dolphin.md)).
+`tests/unit/test_gx.c` (19 pruebas), `test_vtx.c` (10), `test_xform.c` (12), `test_prim.c` (6), `test_efb.c` (5), `test_setup.c` (5), `test_raster.c` (8), `test_tex.c` (6), `test_copy.c` (7) y `test_gxbackend.c` (6), y los DOLs `gx_fifo`, `gx_tri`, `gx_raster`, `gx_tex`, `gx_tev`, `gx_copy` y `gx_escena` ([tests/dol](../../tests/dol/README.md)), iguales a Dolphin instrucción por instrucción, con el mismo estado de GX y EFB al final y los mismos vértices, triángulos y copias bit a bit ([docs/traza-dolphin.md](../../docs/traza-dolphin.md)).
 
 ## Del triángulo al píxel (etapa C3)
 
@@ -143,3 +144,17 @@ Sin caché, como Dolphin por software: cada texel se lee de la RAM (desde la dir
 Con `clock_us` (lo pone la plataforma), GX suma en `busy_us` el tiempo de leer el FIFO, dibujar y copiar, y cuenta las copias al XFB. El runner lo imprime al terminar (`runner: GX ... ms por cuadro dibujado`) y la app al terminar cada DOL. En la PC de la nube, con el runner en `-O2` y sin sanitizers, `gx_escena` tarda unos 73 ms por cuadro: el rasterizador de referencia no es para jugar, y en el PPU va a ser más lento (la medición en consola está pendiente en [docs/perf-log.md](../../docs/perf-log.md)).
 
 Las conversiones de float a entero siguen a x86-64 (`x86.h`) y la aritmética entera que en Dolphin puede desbordar se hace con la vuelta de 32 bits. Lo que en Dolphin escribe fuera de sus arreglos (más de 2 canales, 8 coordenadas o 4 etapas indirectas en genMode) se recorta a esos máximos.
+
+## El backend (etapa D1)
+
+El frente (todo hasta `setup.c`) da los triángulos que llegan al rasterizador de Dolphin, los mismos del volcado `--triangulos`, ya recortados, divididos por w y con el viewport. El backend (`gx_backend_t` en `backend.h`) los dibuja con el estado de BP, la TMEM y la RAM y es dueño del EFB: triángulos, triángulos descartados (solo la pendiente de Z para zfreeze), vaciar, EFB al día y el borrado de una copia. Las copias, la lectura del EFB por el CPU y los volcados usan `gx->efb` después de `gc_gx_efb_sync`.
+
+Un backend puede juntar triángulos y dibujarlos después (el RSX lo hace en lotes). El frente vacía el lote antes de todo lo que cambia lo que lee el dibujo:
+
+| Dónde | Por qué |
+| --- | --- |
+| `bp.c`: cualquier BP que cambia el valor o que actúa siempre, salvo la máscara | Todo el estado del píxel está en BP; las copias, las cargas de la TMEM, los tokens y la caja también |
+| `xf.c`: el viewport (0x101A-0x101F), directo o indexado | Lo leen la tijera y la niebla de rango |
+| `fifo.c`: al terminar cada tramo de la GPU | La CPU puede cambiar las texturas en la RAM o leer el EFB, la caja o el PE |
+
+`gx_backend_sw` dibuja en el acto (el de siempre). `gx_backend_sw_lotes` junta hasta 1024 triángulos y los dibuja al vaciar, en orden con los descartados: tiene que dar lo mismo, y así se prueba que el frente vacía donde hace falta (`test_gxbackend.c` y los 6 DOLs que dibujan en `test_dolphin`, contra Dolphin). El runner lo usa con `--gx-lotes` y al final dice cuántos lotes hubo: `gx_escena` da 73 lotes para 325 triángulos (4,5 por lote), `gx_tev` 681 para 802 (cambia el estado en cada dibujo). Las mutaciones de cada punto de vaciado se detectan, salvo dos que con el software no se pueden ver: el `gc_gx_efb_sync` de la copia (BP 0x52 ya vació el lote; importa en el RSX, donde trae el EFB) y el vaciado al leer la caja (la CPU solo la lee después de un tramo).

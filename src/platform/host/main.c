@@ -30,6 +30,9 @@
  *     --copias ARCHIVO     cada copia del EFB y al final el EFB, con CRC (GCPS3_COPIAS)
  *     --efb ARCHIVO        al terminar, el color del EFB en PNG (640x528, con el
  *                      formato de píxel de ese momento): para mirar lo dibujado
+ *     --gx-lotes       el rasterizador junta los triángulos y dibuja al vaciar
+ *                      el lote, como un backend con lotes (tiene que dar lo
+ *                      mismo); al final, cuántos lotes hubo
  *
  * Lo que el programa imprime (OSReport, printf...) sale por la salida estándar;
  * los mensajes del emulador, por la de error. Sale con el código de exit() del
@@ -73,6 +76,7 @@ static void usage(FILE *out, const char *argv0)
             "  --triangulos ARCHIVO cada triangulo que llega al rasterizador (como Dolphin)\n"
             "  --copias ARCHIVO     cada copia del EFB y el EFB al final, con CRC (como Dolphin)\n"
             "  --efb ARCHIVO        al terminar, el color del EFB en PNG\n"
+            "  --gx-lotes           dibujar por lotes (tiene que dar lo mismo) y contarlos\n"
             "  --version, --help\n",
             argv0, (unsigned)DEFAULT_CYCLES);
 }
@@ -294,6 +298,7 @@ static int write_png(const char *path, const uint8_t *rgb, uint32_t w, uint32_t 
 /* El color del EFB al terminar, en PNG */
 static int write_efb(const char *path)
 {
+    gc_gx_efb_sync(&sys.gx);
     const uint32_t pf = sys.gx.bp[0x43] & 7u;
     uint8_t *rgb = malloc((size_t)GX_EFB_WIDTH * GX_EFB_HEIGHT * 3);
     if (!rgb)
@@ -338,7 +343,7 @@ int main(int argc, char **argv)
     const char *huella_path = NULL, *puntos_path = NULL, *detalle = NULL, *estado_path = NULL;
     const char *vertices_path = NULL, *triangles_path = NULL, *copies_path = NULL, *efb_path = NULL;
     gc_boot_config_t cfg = { 0, 0 };
-    int have_rtc = 0, list_frames = 0;
+    int have_rtc = 0, list_frames = 0, gx_lotes = 0;
 
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
@@ -379,6 +384,8 @@ int main(int argc, char **argv)
             efb_path = argv[i];
         } else if (strcmp(a, "--cuadros") == 0) {
             list_frames = 1;
+        } else if (strcmp(a, "--gx-lotes") == 0) {
+            gx_lotes = 1;
         } else if (strcmp(a, "--huella") == 0 || strcmp(a, "--puntos") == 0 ||
                    strcmp(a, "--detalle") == 0) {
             if (++i >= argc) {
@@ -459,6 +466,12 @@ int main(int argc, char **argv)
         return 1;
     }
     sys.gx.clock_us = host_clock_us;
+    if (gx_lotes && gc_gx_set_backend(&sys.gx, &gx_backend_sw_lotes) != 0) {
+        fprintf(stderr, "sin memoria para los lotes de GX\n");
+        free(data);
+        gc_system_free(&sys);
+        return 1;
+    }
     const gc_dol_error_t err = gc_system_boot_dol(&sys, data, len, &cfg);
     free(data);
     if (err != GC_DOL_OK) {
@@ -563,6 +576,11 @@ int main(int argc, char **argv)
                 (double)sys.gx.busy_us / 1000.0 / (double)sys.gx.xfb_copies);
     else
         fprintf(stderr, "runner: GX %.1f ms\n", (double)sys.gx.busy_us / 1000.0);
+    gx_lotes_stats_t lotes;
+    if (gx_lotes_stats(&sys.gx, &lotes) == 0)
+        fprintf(stderr, "runner: GX por lotes: %llu lotes, %llu triangulos (%.1f por lote, el mayor %u)\n",
+                (unsigned long long)lotes.batches, (unsigned long long)lotes.triangles,
+                lotes.batches ? (double)lotes.triangles / (double)lotes.batches : 0.0, (unsigned)lotes.max);
     if (sys.vi.last.xfb)
         fprintf(stderr, "runner: %llu campos de video, el ultimo de %ux%u con el XFB en 0x%08x\n",
                 (unsigned long long)sys.vi.fields, (unsigned)sys.vi.last.width,

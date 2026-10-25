@@ -70,6 +70,7 @@ void gc_gx_bbox_update(gc_gx_t *gx, uint32_t x, uint32_t y)
 
 uint16_t gc_gx_bbox_get(gc_gx_t *gx, uint32_t index)
 {
+    gc_gx_flush(gx);                            /* la CPU ya la vació al seguir; por las dudas */
     gx->bbox.active = 0;
     if (!gx->bbox.valid) {
         /* Readback: los valores pendientes se quedan */

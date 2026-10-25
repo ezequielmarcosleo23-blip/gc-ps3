@@ -33,12 +33,12 @@ make docker-make     # compila todo dentro de la imagen Docker, igual que el CI
 src/core/            memoria, MMIO, scheduler, DVD, arranque HLE (portable)
 src/cpu/             intérprete de Gekko (el JIT después)
 src/hw/              hardware alrededor de la CPU: PI, VI, SI, EXI, DSP, AI, DI, MI, gather pipe, CP y PE (portable)
-src/gx/              la GPU: FIFO de GX, comandos, estado de BP, CP y XF, carga y transformación de vértices (portable)
+src/gx/              la GPU: FIFO de GX, comandos, estado de BP, CP y XF, vértices, armado y recorte, la interfaz del backend y el rasterizador por software (portable)
 src/dsp/             HLE de AX
 src/spu/             programas SPE (cada carpeta es un programa)
 src/platform/ps3/    código específico de la PS3
 src/platform/host/   runner en PC
-include/backend/     interfaces propias (gfx_backend.h, spu_jobs.h)
+include/backend/     interfaces propias (spu_jobs.h)
 lib/                 librerías de terceros fijadas a un commit (ver lib/VERSIONS.md)
 tests/unit/          pruebas unitarias del núcleo (PC)
 tests/appsim/        la app de PS3 corriendo en la PC con versiones de prueba de lv2, mando y rsxkit

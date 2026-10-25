@@ -574,12 +574,6 @@ static void draw_triangle(gc_gx_t *gx, const gx_rvtx_t *v0, const gx_rvtx_t *v1,
 
 void gx_raster_triangle(gc_gx_t *gx, const gx_rvtx_t *v0, const gx_rvtx_t *v1, const gx_rvtx_t *v2)
 {
-    if (gx->triangle_cb) {
-        const gx_rvtx_t *const v[3] = { v0, v1, v2 };
-        gx->triangle_cb(gx->triangle_ctx, v, bits(gx->bp[BP_GENMODE], 0, 4));
-    }
-    gx->triangles++;
-
     gx_raster_t *r = gx->raster;
     if (r->scissor_dirty)
         gx_raster_scissor_changed(gx);

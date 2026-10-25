@@ -89,6 +89,7 @@ int32_t gc_gx_run_gpu_on_cpu(gc_gx_t *gx, int32_t ticks)
         f->distance -= GC_GPFIFO_BLOCK;
     }
 
+    gc_gx_flush(gx);                                /* antes de que siga la CPU */
     gc_cp_status_from_gpu(cp);
     if (timed)
         gx->busy_us += gx->clock_us() - t0;
@@ -163,11 +164,15 @@ void gc_gx_reset(gc_gx_t *gx)
         memset(gx->xfb_source, 0, GX_XFB_SOURCE_SIZE);
     memset(&gx->bbox, 0, sizeof gx->bbox);
     gx->bbox.valid = 1;
+    if (gx->be && gx->be->reset)
+        gx->be->reset(gx);
 }
 
 int gc_gx_init(gc_gx_t *gx, struct gc_system *sys)
 {
     gx->sys = sys;
+    gx->be = &gx_backend_sw;
+    gx->be_state = NULL;
     gx->vbuf = malloc(GC_GX_VBUF_SIZE);
     gx->efb = malloc(sizeof *gx->efb);
     gx->raster = calloc(1, sizeof *gx->raster);
@@ -183,6 +188,10 @@ int gc_gx_init(gc_gx_t *gx, struct gc_system *sys)
 
 void gc_gx_free(gc_gx_t *gx)
 {
+    if (gx->be && gx->be->free)
+        gx->be->free(gx);
+    gx->be = &gx_backend_sw;
+    gx->be_state = NULL;
     free(gx->vbuf);
     gx->vbuf = NULL;
     free(gx->efb);

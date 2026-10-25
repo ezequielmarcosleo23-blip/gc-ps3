@@ -68,7 +68,9 @@ void gc_gx_load_xf(gc_gx_t *gx, uint16_t base, uint32_t count, const uint8_t *da
             gx->xf[mem_base + i] = be32(data);
     }
     /* Registros; el viewport (0x101A-0x101F) cambia la tijera aunque se
-     * escriba el mismo valor */
+     * escriba el mismo valor, y lo lee el dibujo (backend.h) */
+    if (addr < 0x1020u && end > 0x101Au)
+        gc_gx_flush(gx);
     if (addr >= GC_XF_REGS_START)
         for (; addr < end; addr++, data += 4) {
             if (addr >= 0x101Au && addr <= 0x101Fu)
@@ -88,6 +90,8 @@ void gc_gx_load_xf_indexed(gc_gx_t *gx, uint32_t array, uint32_t index, uint16_t
         return;                                    /* en Dolphin, un puntero nulo */
     }
     gx->xf_dirty = 1;
+    if (address < 0x1020u && (uint32_t)address + size > 0x101Au)
+        gc_gx_flush(gx);                           /* el viewport, como gc_gx_load_xf */
     for (uint32_t i = 0; i < size; i++)
         gx->xf[address + i] = be32(p + 4 * i);
 }

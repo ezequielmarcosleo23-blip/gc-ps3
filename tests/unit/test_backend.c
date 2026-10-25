@@ -20,7 +20,6 @@
 /* Las interfaces de include/backend deben compilar igual en la PC que en la PS3. */
 #include <stddef.h>
 
-#include "backend/gfx_backend.h"
 #include "backend/spu_jobs.h"
 #include "test.h"
 
@@ -32,14 +31,7 @@ static void test_spu_job_desc_layout(void)
     CHECK_EQ_U64(offsetof(spu_job_desc_t, done_ea), 32);
 }
 
-static void test_gfx_backend_ops(void)
-{
-    gfx_backend_t be = { NULL, NULL };
-    CHECK(be.ops == NULL && be.priv == NULL);
-}
-
 const test_case_t backend_tests[] = {
     { "backend: descriptor SPU de 128 B", test_spu_job_desc_layout },
-    { "backend: interfaz gráfica compila", test_gfx_backend_ops },
     { NULL, NULL },
 };

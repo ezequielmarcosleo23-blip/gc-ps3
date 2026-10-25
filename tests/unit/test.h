@@ -77,6 +77,7 @@ extern const test_case_t setup_tests[];
 extern const test_case_t raster_tests[];
 extern const test_case_t tex_tests[];
 extern const test_case_t copy_tests[];
+extern const test_case_t gxbackend_tests[];
 extern const test_case_t xfb_tests[];
 extern const test_case_t hle_tests[];
 extern const test_case_t program_tests[];

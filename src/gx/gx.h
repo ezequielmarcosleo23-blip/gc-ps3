@@ -21,8 +21,8 @@
 /*
  * El lado de la GPU (Fase 2): lee el FIFO de GX de la RAM, decodifica los
  * comandos y guarda el estado de BP, CP y XF (etapa A). Los vértices de cada
- * primitiva se cargan y se transforman (etapa B, prim.c); todavía no se
- * dibujan.
+ * primitiva se cargan y se transforman (etapa B, prim.c), se arman y se
+ * recortan (etapa C, setup.c) y los dibuja el backend (etapa D, backend.h).
  *
  * El tiempo es el de Dolphin (commit cf5cb7ef) con un solo hilo
  * (VideoCommon/Fifo.cpp y OpcodeDecoding.cpp):
@@ -42,6 +42,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "gx/backend.h"
 #include "gx/efb.h"
 
 #define GC_GX_SLOT       1000             /* GPU_TIME_SLOT_SIZE */
@@ -172,10 +173,32 @@ typedef struct gc_gx {
     uint64_t  busy_us;
     uint32_t  xfb_copies;
     void     *copy_ctx;
+
+    /* Lo que dibuja (etapa D, backend.h) y su estado */
+    const gx_backend_t *be;
+    void     *be_state;
 } gc_gx_t;
 
-/* Reserva el búfer de video. 0, o -1 sin memoria. */
+/* Antes de cambiar lo que lee el dibujo: que el backend dibuje lo juntado */
+static inline void gc_gx_flush(gc_gx_t *gx)
+{
+    if (gx->be && gx->be->flush)
+        gx->be->flush(gx);
+}
+
+/* Antes de leer gx->efb: lo juntado dibujado y el EFB al día */
+static inline void gc_gx_efb_sync(gc_gx_t *gx)
+{
+    gc_gx_flush(gx);
+    if (gx->be && gx->be->efb_sync)
+        gx->be->efb_sync(gx);
+}
+
+/* Reserva el búfer de video. 0, o -1 sin memoria. El backend es gx_backend_sw. */
 int  gc_gx_init(gc_gx_t *gx, struct gc_system *sys);
+/* Cambia el backend (vacía el anterior y lo libera; el EFB queda como estaba).
+ * 0, o -1 si el nuevo no tiene memoria (queda gx_backend_sw). */
+int  gc_gx_set_backend(gc_gx_t *gx, const gx_backend_t *be);
 void gc_gx_free(gc_gx_t *gx);
 
 /* Estado de encendido (BPInit, CPState y xfmem en cero, GPU sin evento). */

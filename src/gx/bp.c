@@ -25,7 +25,8 @@
  * 0x48), "draw done" (0x45 = 2), la copia del EFB (0x52, copy.c), la tijera
  * (0x20, 0x21, 0x59), la caja envolvente (0x55, 0x56), las cargas de la TMEM
  * (0x63, 0x65) y los colores del TEV (0xE0-0xE7); el resto se guarda y se lee
- * al dibujar.
+ * al dibujar. Antes de cualquier cambio (salvo la máscara) el backend dibuja lo
+ * que tenga juntado (backend.h).
  */
 #include "core/log.h"
 #include "core/system.h"
@@ -60,6 +61,8 @@ void gc_gx_load_bp(gc_gx_t *gx, uint8_t reg, uint32_t value)
 
     if (old == nv && !always_acts(reg))
         return;
+    if (reg != GX_BP_MASK)
+        gc_gx_flush(gx);
     gx->bp[reg] = nv;
     if (reg >= 0x30 && reg <= 0x3F)
         gx->xf_dirty = 1;                       /* SU_SSIZE y SU_TSIZE: la escala de las coordenadas */

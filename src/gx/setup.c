@@ -36,7 +36,8 @@
  * después, culling (los descartados igual dejan la pendiente de Z para
  * zfreeze), recorte contra los 6 planos en coordenadas homogéneas, división
  * por w y viewport. Las líneas y los puntos se dibujan como dos triángulos con
- * el ancho de BP 0x22. Las cuentas de float siguen el orden de Dolphin.
+ * el ancho de BP 0x22. Las cuentas de float siguen el orden de Dolphin. Los
+ * triángulos que quedan van al backend (backend.h).
  *
  * La licencia original de Clipper.cpp (BSD de 3 cláusulas, de Markus
  * Trenkwalder) es compatible con la GPL.
@@ -267,6 +268,19 @@ static int is_backface(const gc_gx_t *gx, const gx_rvtx_t *v0, const gx_rvtx_t *
     return back;
 }
 
+/* ---- al backend ----------------------------------------------------------------------- */
+
+/* Un triángulo que llega al rasterizador: el volcado, la cuenta y el backend */
+static void emit(gc_gx_t *gx, const gx_rvtx_t *v0, const gx_rvtx_t *v1, const gx_rvtx_t *v2)
+{
+    if (gx->triangle_cb) {
+        const gx_rvtx_t *const v[3] = { v0, v1, v2 };
+        gx->triangle_cb(gx->triangle_ctx, v, gx->bp[BP_GENMODE] & 15u);
+    }
+    gx->triangles++;
+    gx->be->triangle(gx, v0, v1, v2);
+}
+
 /* ---- triángulos, líneas y puntos ------------------------------------------------------ */
 
 static void process_triangle(gc_gx_t *gx, gx_rvtx_t *v0, gx_rvtx_t *v1, gx_rvtx_t *v2)
@@ -284,14 +298,14 @@ static void process_triangle(gc_gx_t *gx, gx_rvtx_t *v0, gx_rvtx_t *v1, gx_rvtx_
             perspective_divide(gx, v0);
             perspective_divide(gx, v1);
             perspective_divide(gx, v2);
-            gx_raster_update_zslope(gx, v0, v1, v2, xo, yo);
+            gx->be->culled(gx, v0, v1, v2, xo, yo);
             return;
         }
     } else if (cull == CULL_FRONT || cull == CULL_ALL) {
         perspective_divide(gx, v0);
         perspective_divide(gx, v2);
         perspective_divide(gx, v1);
-        gx_raster_update_zslope(gx, v0, v2, v1, xo, yo);
+        gx->be->culled(gx, v0, v2, v1, xo, yo);
         return;
     }
 
@@ -318,7 +332,7 @@ static void process_triangle(gc_gx_t *gx, gx_rvtx_t *v0, gx_rvtx_t *v1, gx_rvtx_
         perspective_divide(gx, a);
         perspective_divide(gx, b);
         perspective_divide(gx, c);
-        gx_raster_triangle(gx, a, b, c);
+        emit(gx, a, b, c);
     }
 }
 
@@ -380,9 +394,9 @@ static void process_line(gc_gx_t *gx, gx_rvtx_t *l0, gx_rvtx_t *l1)
     copy_line_vertex(gx, &t[0], v0, px, py, 0);
     copy_line_vertex(gx, &t[1], v1, px, py, 0);
     copy_line_vertex(gx, &t[2], v1, -px, -py, 1);
-    gx_raster_triangle(gx, &t[2], &t[1], &t[0]);
+    emit(gx, &t[2], &t[1], &t[0]);
     copy_line_vertex(gx, &t[1], v0, -px, -py, 1);
-    gx_raster_triangle(gx, &t[0], &t[1], &t[2]);
+    emit(gx, &t[0], &t[1], &t[2]);
 }
 
 static void copy_point_vertex(const gc_gx_t *gx, gx_rvtx_t *dst, const gx_rvtx_t *src, int px, int py)
@@ -418,8 +432,8 @@ static void process_point(gc_gx_t *gx, gx_rvtx_t *center)
     copy_point_vertex(gx, &lr, center, 1, 0);
     copy_point_vertex(gx, &ur, center, 1, 1);
     copy_point_vertex(gx, &ul, center, 0, 1);
-    gx_raster_triangle(gx, &ll, &ul, &lr);
-    gx_raster_triangle(gx, &ur, &lr, &ul);
+    emit(gx, &ll, &ul, &lr);
+    emit(gx, &ur, &lr, &ul);
 }
 
 /* ---- armado --------------------------------------------------------------------------- */

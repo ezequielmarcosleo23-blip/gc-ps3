@@ -273,6 +273,9 @@ static int load_reference(const char *name, uint64_t *rtc)
     return npoints > 0 ? 0 : -1;
 }
 
+/* Con un backend distinto del de omisión (el de lotes, etapa D1) */
+static const gx_backend_t *check_backend;
+
 static int check_dol(const char *name)
 {
     char path[256];
@@ -305,6 +308,13 @@ static int check_dol(const char *name)
     gc_log_set_sink(quiet);
     const gc_boot_config_t cfg = { 0, rtc };
     if (dol_len && map_len && gc_system_init(&sys) == 0) {
+        if (check_backend && gc_gx_set_backend(&sys.gx, check_backend) != 0) {
+            gc_system_free(&sys);
+            gc_log_set_sink(NULL);
+            free(dol);
+            free(map);
+            return 0;
+        }
         if (gc_system_boot_dol(&sys, dol, dol_len, &cfg) == GC_DOL_OK) {
             gc_system_load_map(&sys, map, map_len);
             sys.hle.report = ignore_line;
@@ -395,6 +405,20 @@ static void test_gx_tev(void) { CHECK(check_dol("gx_tev")); }
 static void test_gx_copy(void) { CHECK(check_dol("gx_copy")); }
 static void test_gx_escena(void) { CHECK(check_dol("gx_escena")); }
 
+/* Los que dibujan, con el backend de lotes: lo mismo que Dolphin (el frente
+ * vacía el lote donde hace falta) */
+static void test_lotes(void)
+{
+    static const char *const dols[] = { "gx_tri", "gx_raster", "gx_tex", "gx_tev", "gx_copy", "gx_escena" };
+    check_backend = &gx_backend_sw_lotes;
+    for (size_t i = 0; i < sizeof dols / sizeof dols[0]; i++)
+        if (!check_dol(dols[i])) {
+            fprintf(stderr, "  %s: distinto con lotes\n", dols[i]);
+            CHECK(0);
+        }
+    check_backend = NULL;
+}
+
 const test_case_t dolphin_tests[] = {
     { "huella: formato v1 (el mismo del parche de Dolphin)", test_huella_format },
     { "dolphin hola: cada instrucción igual a Dolphin", test_hola },
@@ -410,5 +434,6 @@ const test_case_t dolphin_tests[] = {
     { "dolphin gx_tev: cada instrucción, vértice, triángulo y el EFB con el TEV completo iguales a Dolphin", test_gx_tev },
     { "dolphin gx_copy: cada instrucción y cada copia a la RAM iguales a Dolphin", test_gx_copy },
     { "dolphin gx_escena: la escena entera, cuadro por cuadro, igual a Dolphin", test_gx_escena },
+    { "dolphin con lotes: los 6 DOLs que dibujan, iguales a Dolphin con el backend de lotes", test_lotes },
     { NULL, NULL },
 };

@@ -47,6 +47,7 @@ static const test_case_t *const suites[] = {
     raster_tests,
     tex_tests,
     copy_tests,
+    gxbackend_tests,
     xfb_tests,
     hle_tests,
     program_tests,
