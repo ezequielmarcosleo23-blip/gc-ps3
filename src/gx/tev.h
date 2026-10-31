@@ -54,12 +54,33 @@ typedef struct gx_tev {
     uint8_t  ind_linear[4], tex_linear[16];
 } gx_tev_t;
 
+/* Lo que entra y sale de un píxel del TEV: con gc_gx_t.tev_probe, las pruebas
+ * comparan el fragment program del RSX con el TEV (etapa D3) */
+typedef struct gx_tev_probe {
+    int32_t  pos[3];
+    uint8_t  color[2][4];
+    int32_t  uv[8][2];
+    int32_t  ind_lod[4], tex_lod[16];
+    uint8_t  ind_linear[4], tex_linear[16];
+    int      killed;                /* no pasó la prueba de alfa */
+    uint8_t  out[4];                /* RGBA después de la niebla */
+    int32_t  z;                     /* después de la textura de Z */
+} gx_tev_probe_t;
+
 /* Las constantes K0-K3 de BP 0xE0-0xE7 (Tev::SetKonstColors, al dibujar) */
 void gx_tev_set_konst(struct gc_gx *gx, gx_tev_t *t);
 
 /* Un píxel (Tev::Draw): combina, prueba alfa, niebla, Z tardía y lo mezcla
  * con el EFB */
 void gx_tev_draw(struct gc_gx *gx, gx_tev_t *t);
+
+/* m_KonstLUT: a, r, g, b de un KonstSel con las constantes konst[i] (r g b a) */
+void gx_tev_konst_lut(const int16_t konst[4][4], uint32_t sel, int16_t *a, int16_t *r, int16_t *g, int16_t *b);
+/* Los parámetros de la niebla como los lee Tev.cpp: A y C (con el caso NaN) y
+ * el k del rango (K[5] cae en BP 0xEE) */
+float gx_tev_fog_a(const struct gc_gx *gx);
+float gx_tev_fog_c(const struct gc_gx *gx);
+float gx_tev_fog_k(const struct gc_gx *gx, int32_t index);
 
 /* Una muestra de la textura texmap en s, t (s17.7) con el LOD en s28.4 y el
  * filtro que eligió el rasterizador: RGBA (tex.c, TextureSampler::Sample) */

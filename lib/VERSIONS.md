@@ -19,3 +19,4 @@ Notas:
 | Origen | Commit | Licencia | Dónde | Qué |
 | --- | --- | --- | --- | --- |
 | [Dolphin](https://github.com/dolphin-emu/dolphin) | `cf5cb7ef81c3e8e7af5c9d566334219ffda9f68b` | GPL-2.0-or-later | `src/cpu/fpu_util.c`, `interp_fpu.c`, `interp_ps.c` | Semántica de la FPU y los paired singles del Gekko: `Common/FloatUtils`, `Interpreter_FPUtils.h`, `Interpreter_FloatingPoint.cpp`, `Interpreter_Paired.cpp`, `Interpreter_LoadStorePaired.cpp` (D-030). Los valores de prueba de `tools/ppc-oracle/oracle_fpu.c` toman parte de `UnitTests/Core/PowerPC/TestValues.h` |
+| [rsxkit](https://github.com/ricowp81/rsxkit) | `0235a022752111862f038e7d40146e088f85b681` | MIT | `src/gx/rsxfp.c` | El formato del microcódigo de los fragment programs del RSX, como lo documenta `src/fpgen.c` (campos de `nvfx_shader.h` de cgcomp); el código es propio y se coteja con programas que ensambla cgcomp (`tests/unit/data/fp`) |

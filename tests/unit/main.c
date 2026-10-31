@@ -48,6 +48,8 @@ static const test_case_t *const suites[] = {
     tex_tests,
     copy_tests,
     gxbackend_tests,
+    rsxfp_tests,
+    tevfp_tests,
     xfb_tests,
     hle_tests,
     program_tests,

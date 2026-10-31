@@ -107,7 +107,7 @@ void gx_tev_set_konst(gc_gx_t *gx, gx_tev_t *t)
 }
 
 /* m_KonstLUT: a, r, g, b de cada KonstSel */
-static void konst_lut(const gx_tev_t *t, uint32_t sel, int16_t *a, int16_t *r, int16_t *g, int16_t *b)
+void gx_tev_konst_lut(const int16_t konst[4][4], uint32_t sel, int16_t *a, int16_t *r, int16_t *g, int16_t *b)
 {
     static const int16_t fixed[8] = { V1, V7_8, V3_4, V5_8, V1_2, V3_8, V1_4, V1_8 };
     if (sel < 8) {
@@ -115,14 +115,14 @@ static void konst_lut(const gx_tev_t *t, uint32_t sel, int16_t *a, int16_t *r, i
     } else if (sel < 12) {
         *a = *r = *g = *b = V0;                 /* inválidos: el hardware da 0 */
     } else if (sel < 16) {
-        const int16_t *k = t->konst[sel - 12];
+        const int16_t *k = konst[sel - 12];
         *a = V0;
         *r = k[GX_RED];
         *g = k[GX_GRN];
         *b = k[GX_BLU];
     } else {
         static const int comp[4] = { GX_RED, GX_GRN, GX_BLU, GX_ALP };
-        const int16_t v = t->konst[(sel - 16) & 3][comp[(sel - 16) >> 2]];
+        const int16_t v = konst[(sel - 16) & 3][comp[(sel - 16) >> 2]];
         *a = *r = *g = *b = v;
     }
 }
@@ -416,12 +416,12 @@ static int fog_nan_case(const gc_gx_t *gx)
     return bits(gx->bp[BP_FOG_A], 11, 8) == 255 && bits(gx->bp[BP_FOG_C], 11, 8) == 255;
 }
 
-static float fog_a(const gc_gx_t *gx)
+float gx_tev_fog_a(const gc_gx_t *gx)
 {
     return fog_nan_case(gx) ? 0.0f : fog_float(gx->bp[BP_FOG_A]);
 }
 
-static float fog_c(const gc_gx_t *gx)
+float gx_tev_fog_c(const gc_gx_t *gx)
 {
     if (fog_nan_case(gx))
         return !bits(gx->bp[BP_FOG_A], 19, 1) && !bits(gx->bp[BP_FOG_C], 19, 1) ? -INFINITY : INFINITY;
@@ -429,7 +429,7 @@ static float fog_c(const gc_gx_t *gx)
 }
 
 /* FogRangeKElement::GetValue; K[5] cae en el registro siguiente (fog.a), como en Dolphin */
-static float fog_k(const gc_gx_t *gx, int32_t index)
+float gx_tev_fog_k(const gc_gx_t *gx, int32_t index)
 {
     const uint32_t v = gx->bp[BP_FOGRANGE + 1 + (uint32_t)(index / 2)];
     return (float)((index % 2) ? bits(v, 0, 12) : bits(v, 12, 12)) / 256.f;
@@ -446,9 +446,9 @@ static void fog(const gc_gx_t *gx, const gx_tev_t *t, uint8_t out[4])
     if (!bits(c, 20, 1)) {                      /* perspectiva: ze = A / (B - (Zs >> B_SHF)) */
         const int32_t zs = t->pos[2] >> (gx->bp[BP_FOG_BSHIFT] & 31u);
         const int32_t denom = (int32_t)(gx->bp[BP_FOG_BMAG] - (uint32_t)zs);
-        ze = (fog_a(gx) * 16777215.0f) / (float)denom;
+        ze = (gx_tev_fog_a(gx) * 16777215.0f) / (float)denom;
     } else {                                    /* ortográfica: ze = A × Zs */
-        ze = fog_a(gx) * ((float)t->pos[2] / 16777215.0f);
+        ze = gx_tev_fog_a(gx) * ((float)t->pos[2] / 16777215.0f);
     }
 
     const uint32_t range = gx->bp[BP_FOGRANGE];
@@ -462,15 +462,15 @@ static void fog(const gc_gx_t *gx, const gx_tev_t *t, uint8_t out[4])
         if (lower < 0 || lower > 9)
             lower = 0;                          /* NaN: en Dolphin lee fuera de bpmem */
         const int32_t upper = lower + 1;
-        const float kl = fog_k(gx, lower) * 4.f;
-        const float ku = fog_k(gx, upper) * 4.f;
+        const float kl = gx_tev_fog_k(gx, lower) * 4.f;
+        const float ku = gx_tev_fog_k(gx, upper) * 4.f;
         const float factor = (float)upper - fi;
         const float k = kl * factor + ku * (1.f - factor);
         const float x_adjust = (float)(sqrt((double)(offset * offset + k * k)) / (double)k);
         ze *= x_adjust;
     }
 
-    ze -= fog_c(gx);
+    ze -= gx_tev_fog_c(gx);
     float f = clampf(ze, 0.f, 1.f);
     switch (fsel) {
     case 4:                                     /* Exp */
@@ -505,6 +505,16 @@ void gx_tev_draw(gc_gx_t *gx, gx_tev_t *t)
 {
     const uint32_t *bp = gx->bp;
     const uint32_t genmode = bp[BP_GENMODE];
+    gx_tev_probe_t probe;
+    if (gx->tev_probe) {
+        memcpy(probe.pos, t->pos, sizeof probe.pos);
+        memcpy(probe.color, t->color, sizeof probe.color);
+        memcpy(probe.uv, t->uv, sizeof probe.uv);
+        memcpy(probe.ind_lod, t->ind_lod, sizeof probe.ind_lod);
+        memcpy(probe.tex_lod, t->tex_lod, sizeof probe.tex_lod);
+        memcpy(probe.ind_linear, t->ind_linear, sizeof probe.ind_linear);
+        memcpy(probe.tex_linear, t->tex_linear, sizeof probe.tex_linear);
+    }
     const uint32_t ntexgens = bits(genmode, 0, 4);
     const uint32_t nstages = bits(genmode, 10, 4);
     uint32_t nind = bits(genmode, 16, 3);
@@ -568,11 +578,11 @@ void gx_tev_draw(gc_gx_t *gx, gx_tev_t *t)
         const uint32_t kc = (s & 1u) ? bits(ksel, 14, 5) : bits(ksel, 4, 5);
         const uint32_t ka = (s & 1u) ? bits(ksel, 19, 5) : bits(ksel, 9, 5);
         int16_t a, r, g, b;
-        konst_lut(t, kc, &a, &r, &g, &b);
+        gx_tev_konst_lut((const int16_t (*)[4])t->konst, kc, &a, &r, &g, &b);
         t->stage_konst[GX_RED] = r;
         t->stage_konst[GX_GRN] = g;
         t->stage_konst[GX_BLU] = b;
-        konst_lut(t, ka, &a, &r, &g, &b);
+        gx_tev_konst_lut((const int16_t (*)[4])t->konst, ka, &a, &r, &g, &b);
         t->stage_konst[GX_ALP] = a;
 
         set_ras_color(gx, t, bits(order, sh + 7, 3), bits(ac, 0, 2));
@@ -614,8 +624,15 @@ void gx_tev_draw(gc_gx_t *gx, gx_tev_t *t)
     out[GX_GRN] = (uint8_t)t->reg[cdest][GX_GRN];
     out[GX_RED] = (uint8_t)t->reg[cdest][GX_RED];
 
-    if (!alpha_test(gx, out[GX_ALP]))
+    if (!alpha_test(gx, out[GX_ALP])) {
+        if (gx->tev_probe) {
+            probe.killed = 1;
+            memset(probe.out, 0, sizeof probe.out);
+            probe.z = 0;
+            gx->tev_probe(gx->tev_probe_ctx, &probe);
+        }
         return;
+    }
 
     /* Textura de Z */
     const uint32_t ztex2 = bp[BP_ZTEX2];
@@ -640,6 +657,15 @@ void gx_tev_draw(gc_gx_t *gx, gx_tev_t *t)
     }
 
     fog(gx, t, out);
+    if (gx->tev_probe) {
+        probe.killed = 0;
+        probe.out[0] = out[GX_RED];
+        probe.out[1] = out[GX_GRN];
+        probe.out[2] = out[GX_BLU];
+        probe.out[3] = out[GX_ALP];
+        probe.z = t->pos[2];
+        gx->tev_probe(gx->tev_probe_ctx, &probe);
+    }
 
     /* Z tardía (GetEmulatedZ() == Late) */
     if (bits(bp[BP_ZMODE], 0, 1) && !bits(bp[BP_ZCONTROL], 6, 1)) {

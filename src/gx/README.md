@@ -17,6 +17,9 @@ Fase 2 ([docs/fase2.md](../../docs/fase2.md)): etapas A (FIFO y estado), B (vér
 | `xform.h`, `xform.c` | El XF: posición, proyección, normales, color y alfa con 8 luces, coordenadas de textura (listo para SPU) | `VideoBackends/Software/TransformUnit.cpp` |
 | `raster.h`, `setup.c` | Armado de triángulos, líneas y puntos; recorte, culling, división por w y viewport; el volcado de triángulos y la entrega al backend | `IndexGenerator.cpp`, `VideoBackends/Software/SetupUnit.cpp`, `Clipper.cpp` |
 | `backend.h`, `backend_sw.c` | La interfaz del backend (etapa D1) y los dos por software: en el acto y con lotes | |
+| `rsxfp.h`, `rsxfp.c` | Ensamblador de fragment programs del RSX (etapa D2), las mismas palabras que cgcomp | `src/fpgen.c` de rsxkit (el formato) |
+| `rsxfp_sim.c` | Simulador de esos programas en fp32, para las pruebas de la PC | |
+| `tevfp.h`, `tevfp.c` | El TEV como fragment program (etapa D3): clave, programa y constantes de cada dibujo | `Tev.cpp` (el mismo cálculo) |
 | `raster.c` | El rasterizador: rectángulos de tijera, aristas en 28.4, bloques de 2 × 2, pendientes, LOD, zfreeze, Z temprana | `VideoBackends/Software/Rasterizer.cpp`, `BPFunctions.cpp` |
 | `tev.h`, `tev.c` | El TEV: etapas indirectas, combinadores, constantes, swap, prueba de alfa, textura de Z, niebla, Z tardía | `VideoBackends/Software/Tev.cpp` |
 | `exp2.h`, `exp2.c` | El 2^x de la niebla en double-double: el mismo float que `pow` de glibc, igual en la PC y en el PPU | |
@@ -90,7 +93,7 @@ Listo para SPU quiere decir búfer a búfer, sin estado global ni punteros a la 
 
 ## Pruebas
 
-`tests/unit/test_gx.c` (19 pruebas), `test_vtx.c` (10), `test_xform.c` (12), `test_prim.c` (6), `test_efb.c` (5), `test_setup.c` (5), `test_raster.c` (8), `test_tex.c` (6), `test_copy.c` (7) y `test_gxbackend.c` (6), y los DOLs `gx_fifo`, `gx_tri`, `gx_raster`, `gx_tex`, `gx_tev`, `gx_copy` y `gx_escena` ([tests/dol](../../tests/dol/README.md)), iguales a Dolphin instrucción por instrucción, con el mismo estado de GX y EFB al final y los mismos vértices, triángulos y copias bit a bit ([docs/traza-dolphin.md](../../docs/traza-dolphin.md)).
+`tests/unit/test_gx.c` (19 pruebas), `test_vtx.c` (10), `test_xform.c` (12), `test_prim.c` (6), `test_efb.c` (5), `test_setup.c` (5), `test_raster.c` (8), `test_tex.c` (6), `test_copy.c` (7), `test_gxbackend.c` (6), `test_rsxfp.c` (4) y `test_tevfp.c` (5), y los DOLs `gx_fifo`, `gx_tri`, `gx_raster`, `gx_tex`, `gx_tev`, `gx_copy` y `gx_escena` ([tests/dol](../../tests/dol/README.md)), iguales a Dolphin instrucción por instrucción, con el mismo estado de GX y EFB al final y los mismos vértices, triángulos y copias bit a bit ([docs/traza-dolphin.md](../../docs/traza-dolphin.md)).
 
 ## Del triángulo al píxel (etapa C3)
 
@@ -158,3 +161,22 @@ Un backend puede juntar triángulos y dibujarlos después (el RSX lo hace en lot
 | `fifo.c`: al terminar cada tramo de la GPU | La CPU puede cambiar las texturas en la RAM o leer el EFB, la caja o el PE |
 
 `gx_backend_sw` dibuja en el acto (el de siempre). `gx_backend_sw_lotes` junta hasta 1024 triángulos y los dibuja al vaciar, en orden con los descartados: tiene que dar lo mismo, y así se prueba que el frente vacía donde hace falta (`test_gxbackend.c` y los 6 DOLs que dibujan en `test_dolphin`, contra Dolphin). El runner lo usa con `--gx-lotes` y al final dice cuántos lotes hubo: `gx_escena` da 73 lotes para 325 triángulos (4,5 por lote), `gx_tev` 681 para 802 (cambia el estado en cada dibujo). Las mutaciones de cada punto de vaciado se detectan, salvo dos que con el software no se pueden ver: el `gc_gx_efb_sync` de la copia (BP 0x52 ya vació el lote; importa en el RSX, donde trae el EFB) y el vaciado al leer la caja (la CPU solo la lee después de un tramo).
+
+## Fragment programs del RSX (etapas D2 y D3)
+
+En la consola no hay compilador de Cg: el programa de cada estado del TEV se arma en el momento. `rsxfp.c` ensambla el microcódigo NV40 (4 palabras por instrucción y una constante opcional de 4 floats detrás); da las mismas palabras que cgcomp de PSL1GHT para los programas de `tests/unit/data/fp` (`make fp-ref` los reensambla). `rsxfp_sim.c` los corre en la PC en fp32.
+
+`tevfp.c` traduce el TEV de `tev.c` paso por paso a ese microcódigo:
+
+| Parte | Cómo |
+| --- | --- |
+| Entradas | Los vértices van con w = 1: todo se interpola lineal en la pantalla, como en GX, y la perspectiva de las coordenadas la hace el programa (S / Q). TEXCOORDi.xyz lleva la coordenada i; los .w de TEXCOORD0-3 y 4-7, los dos colores; FOGC.x, la Z; WPOS.x, la columna |
+| Enteros en float | Las cuentas de Dolphin con valores enteros de menos de 2^24 (exactas en fp32): `>> n` es FLR(x × 2^-n), `(uint8_t)` es x - 256 × FLR(x / 256), la división de C es FLR(|x|) con el signo |
+| Etapas | Color y alfa juntos en un vector, con constantes por componente cuando difieren; comparaciones con DP3 (hasta 24 bits) y SGT/SEQ |
+| Indirectas | Las coordenadas módulo 2^24 como el sext24 de Dolphin, también con la escala que corre a la izquierda (la vuelta de 32 bits) y la matriz dinámica partiendo s en 256 sh + sl |
+| Prueba de alfa, textura de Z | KIL con el registro de condición; la Z de 24 bits en dos mitades de 12 |
+| Niebla | Con RCP, LG2 y EX2: en el RSX es aproximada |
+| Constantes | Los registros y las constantes del TEV, las matrices indirectas, las referencias, la niebla y la escala de las texturas se escriben en cada dibujo (`gx_tevfp_patch`); la clave (`gx_tevfp_key`) es lo demás de BP |
+
+`test_tevfp.c` corre los DOLs que dibujan con el rasterizador por software y, en cada píxel que llega al TEV, el programa de ese estado en el simulador con las mismas entradas y el muestreador de `tex.c`: color, prueba de alfa y textura de Z iguales en todos (de cada programa, los primeros 4096 píxeles y después 1 de cada 16). No se compara lo que en Dolphin viene de otro píxel (textura sin etapa con textura antes, canal de color apagado, etapa indirecta que no existe): en `gx_tev`, el 15 % de los píxeles.
+

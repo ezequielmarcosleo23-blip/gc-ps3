@@ -89,6 +89,7 @@ struct gc_system;
 struct gx_vtx_out;
 struct gx_rvtx;
 struct gx_raster;
+struct gx_tev_probe;
 
 typedef struct gc_gx {
     struct gc_system *sys;
@@ -140,6 +141,9 @@ typedef struct gc_gx {
      * 0xE0-0xE7, r g b a (PixelShaderManager colors y kcolors) */
     int16_t   tev_color[4][4];
     int16_t   tev_kcolor[4][4];
+    /* Cada píxel del TEV, con lo que entró y lo que salió (pruebas, etapa D3) */
+    void    (*tev_probe)(void *ctx, const struct gx_tev_probe *p);
+    void     *tev_probe_ctx;
     int       tex_noted;              /* ya se avisó de un formato de textura que no existe */
 
     /* TMEM: 1 MB de paletas y texturas precargadas (tex.c) */

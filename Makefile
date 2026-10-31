@@ -7,6 +7,7 @@
 #   make test-be    las mismas pruebas en big-endian (PowerPC 64 con QEMU)
 #   make test-app   corre la app de PS3 en la PC con un guion y la compara con el runner
 #   make oracle     regenera las tablas del oráculo de Gekko (PowerPC 750CXe en QEMU)
+#   make fp-ref     reensambla con cgcomp los fragment programs de referencia (tests/unit/data/fp)
 #   make testdols   recompila los DOLs de prueba (tests/dol) y sus salidas esperadas
 #   make dolphin    compila Dolphin con el parche de traza (docs/traza-dolphin.md)
 #   make dolphin-ref  compara los DOLs con Dolphin y regenera tests/dol/dolphin
@@ -31,7 +32,7 @@ include mk/ps3.mk
 include mk/host.mk
 include mk/testdols.mk
 
-.PHONY: all ps3 phase0 pkg host test test-be test-app oracle testdols dolphin dolphin-ref run run-test logrecv clean toolchain-check docker-image docker-make help
+.PHONY: all ps3 phase0 pkg host test test-be test-app oracle fp-ref testdols dolphin dolphin-ref run run-test logrecv clean toolchain-check docker-image docker-make help
 
 all: ps3 phase0 host
 
@@ -67,6 +68,10 @@ test-be: $(HOST_BE_TESTS)
 oracle: $(ORACLE_BINS)
 	@mkdir -p tests/unit/data
 	for b in $(ORACLE_BINS); do $(ORACLE_QEMU) $$b tests/unit/data/$$(basename $$b).bin || exit 1; done
+
+# Fragment programs de referencia para test_rsxfp.c: los ensambla cgcomp de PSL1GHT
+fp-ref:
+	for f in tests/unit/data/fp/*.asm; do $(PS3_TOOLS)/cgcomp -f -a $$f $${f%.asm}.fpo || exit 1; done
 
 # Recompila los DOLs de prueba (necesita gcc-powerpc-linux-gnu; ver mk/testdols.mk)
 testdols: $(TESTDOLS:%=$(DOL_OUT)/%.dol) $(TESTDOLS_HOSTED:%=tests/dol/esperado/%.txt)
